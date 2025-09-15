@@ -39,12 +39,8 @@ def init_redis(app):
     global redis_client
     redis_url = app.config.get('REDIS_URL', 'redis://localhost:6379/0')
     
-    # Handle Render's internal Redis URL format
-    if 'red-' in redis_url and '.render.com' not in redis_url:
-        # Convert internal Render Redis ID to full URL
-        redis_id = redis_url.split('//')[1].split(':')[0]
-        redis_url = f'redis://{redis_id}.oregon-postgres.render.com'
-        logger.info(f"Using Render Redis URL: {redis_url}")
+    # Log the Redis URL we're trying to connect to (without exposing credentials)
+    logger.info(f"Attempting Redis connection to: {redis_url.split('@')[-1] if '@' in redis_url else redis_url.split('//')[-1]}")
     
     try:
         redis_client = redis.from_url(
