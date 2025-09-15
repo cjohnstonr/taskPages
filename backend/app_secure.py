@@ -45,6 +45,9 @@ if os.environ.get('DISABLE_REDIS', 'false').lower() == 'true':
     logger.warning("Redis disabled by environment variable - using filesystem sessions")
     redis_client = None
     app.config['SESSION_TYPE'] = 'filesystem'
+    # Fix for Python 3.13 compatibility
+    app.config['SESSION_FILE_DIR'] = '/tmp/flask_session'
+    app.config['SESSION_FILE_THRESHOLD'] = 100
     Session(app)
 else:
     try:
@@ -57,6 +60,9 @@ else:
         logger.warning("Falling back to filesystem sessions")
         redis_client = None
         app.config['SESSION_TYPE'] = 'filesystem'
+        # Fix for Python 3.13 compatibility
+        app.config['SESSION_FILE_DIR'] = '/tmp/flask_session'
+        app.config['SESSION_FILE_THRESHOLD'] = 100
         Session(app)
 
 # Initialize security middleware

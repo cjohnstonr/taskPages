@@ -271,9 +271,15 @@ def login():
     session['oauth_state'] = state
     session['oauth_timestamp'] = datetime.utcnow().isoformat()
     
+    # Ensure session is properly saved
+    session.modified = True
+    
     # Generate nonce for additional security
     nonce = secrets.token_urlsafe(32)
     session['oauth_nonce'] = nonce
+    
+    # Ensure session modifications are saved
+    session.modified = True
     
     # Build OAuth URL
     params = {
