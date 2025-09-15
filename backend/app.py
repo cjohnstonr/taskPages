@@ -123,6 +123,18 @@ class ClickUpService:
         logger.info(f"Process Library root found: {last_process_library_task.get('id') if last_process_library_task else None}")
         return last_process_library_task
     
+    def find_main_parent_task(self, start_task_id: str) -> Optional[Dict[str, Any]]:
+        """Find the ultimate parent task (the main business task)"""
+        current_task = self.get_task(start_task_id, custom_task_ids=True)
+        
+        # Traverse up to find the top-most parent
+        while current_task.get('parent'):
+            logger.info(f"Traversing up from {current_task['id']} to parent {current_task['parent']}")
+            current_task = self.get_task(current_task['parent'], custom_task_ids=True)
+        
+        logger.info(f"Main parent task found: {current_task['id']} - {current_task.get('name')}")
+        return current_task
+    
     def fetch_subtasks_with_details(self, parent_task_id: str) -> List[Dict[str, Any]]:
         """Fetch all subtasks with their custom fields"""
         # First get parent with subtasks to get IDs
@@ -176,7 +188,7 @@ def health_check():
 def initialize_wait_node(task_id):
     """
     Combined endpoint to fetch all necessary data for wait node interface
-    Returns root task, wait task, and all subtasks in a single response
+    Returns root task, wait task, main parent task, and all subtasks in a single response
     """
     try:
         logger.info(f"Initializing wait node for task: {task_id}")
@@ -189,12 +201,16 @@ def initialize_wait_node(task_id):
         # Get wait task details
         wait_task = clickup_service.get_task(task_id, custom_task_ids=True)
         
+        # Get main parent task (the ultimate business task)
+        main_task = clickup_service.find_main_parent_task(task_id)
+        
         # Get all subtasks
         subtasks = clickup_service.fetch_subtasks_with_details(root_task['id'])
         
         return jsonify({
             "root_task": root_task,
             "wait_task": wait_task,
+            "main_task": main_task,
             "subtasks": subtasks
         })
     
