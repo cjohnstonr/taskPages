@@ -147,6 +147,32 @@
         ? 'http://localhost:5678' 
         : 'https://taskpages-backend.onrender.com'; // Production backend URL on Render
     const PROCESS_LIBRARY_TYPE = 1018; // custom_item_id for Process Library tasks
+    
+    // Check authentication on page load
+    async function checkAuthentication() {
+        try {
+            const response = await fetch(`${BACKEND_URL}/auth/status`, {
+                credentials: 'include'
+            });
+            const data = await response.json();
+            
+            if (!data.authenticated) {
+                // Save current URL to return after login
+                const currentUrl = window.location.href;
+                sessionStorage.setItem('redirect_after_login', currentUrl);
+                
+                // Redirect to login
+                window.location.href = `${BACKEND_URL}/auth/login`;
+                return false;
+            }
+            return true;
+        } catch (error) {
+            console.error('Authentication check failed:', error);
+            // If auth check fails, try to redirect to login anyway
+            window.location.href = `${BACKEND_URL}/auth/login`;
+            return false;
+        }
+    }
 
     // Custom field IDs
     const FIELD_IDS = {
@@ -196,6 +222,7 @@
             try {
                 const response = await fetch(`${this.baseUrl}${endpoint}`, {
                     ...options,
+                    credentials: 'include', // Include cookies for authentication
                     headers: {
                         'Content-Type': 'application/json',
                         ...options.headers
@@ -203,6 +230,13 @@
                 });
 
                 if (!response.ok) {
+                    // If unauthorized, redirect to login
+                    if (response.status === 401) {
+                        const currentUrl = window.location.href;
+                        sessionStorage.setItem('redirect_after_login', currentUrl);
+                        window.location.href = `${this.baseUrl}/auth/login`;
+                        throw new Error('Authentication required');
+                    }
                     const errorData = await response.json();
                     throw new Error(`API error: ${response.status} - ${JSON.stringify(errorData)}`);
                 }
@@ -1030,8 +1064,21 @@
         );
     }
 
-    // Render the app
-    ReactDOM.render(<WaitApprovalApp />, document.getElementById('root'));
+    // Check if we're returning from OAuth login
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('auth') === 'success') {
+        // Clean URL
+        const newUrl = window.location.href.replace('&auth=success', '').replace('?auth=success&', '?').replace('?auth=success', '');
+        window.history.replaceState({}, document.title, newUrl);
+    }
+    
+    // Render the app only after auth check
+    window.addEventListener('DOMContentLoaded', async () => {
+        const isAuthenticated = await checkAuthentication();
+        if (isAuthenticated) {
+            ReactDOM.render(<WaitApprovalApp />, document.getElementById('root'));
+        }
+    });
 </script>
 </body>
 </html>
