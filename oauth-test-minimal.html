@@ -91,30 +91,15 @@
             log('🚀 Testing login redirect...', 'info');
             
             try {
-                log(`📡 Checking: ${BACKEND_URL}/auth/login`, 'info');
+                log(`📡 Direct redirect to: ${BACKEND_URL}/auth/login`, 'info');
+                log('🔄 Redirecting now...', 'info');
                 
-                // Test login endpoint accessibility
-                log('🔍 Checking login endpoint response...', 'info');
-                const response = await fetch(`${BACKEND_URL}/auth/login`, {
-                    method: 'GET',
-                    credentials: 'include',
-                    redirect: 'manual'  // Don't follow redirects, just see the response
-                });
-                
-                log(`📊 Login endpoint status: ${response.status}`, 'info');
-                
-                if (response.status === 302) {
-                    log('✅ Login endpoint returns redirect (good!)', 'success');
-                    log('🔄 Now redirecting to login...', 'info');
-                    
-                    // Actually redirect
-                    window.location.href = `${BACKEND_URL}/auth/login`;
-                } else {
-                    log(`❌ Unexpected login response: ${response.status}`, 'error');
-                }
+                // Don't use fetch for OAuth redirects - use direct navigation
+                // This avoids CORS issues with redirects
+                window.location.href = `${BACKEND_URL}/auth/login`;
                 
             } catch (error) {
-                log(`💥 Login test error: ${error.message}`, 'error');
+                log(`💥 Login redirect error: ${error.message}`, 'error');
             }
         }
         
