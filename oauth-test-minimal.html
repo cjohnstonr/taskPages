@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .error { background: #ffe6e6; color: #d00; }
+        .success { background: #e6ffe6; color: #080; }
+        .info { background: #e6f3ff; color: #006; }
+        button { padding: 10px 20px; margin: 5px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 OAuth Debug Test</h1>
+    <p><strong>Purpose:</strong> Test OAuth flow step by step with full visibility</p>
+    
+    <div id="status" class="log">
+        <strong>Status:</strong> <span id="status-text">Starting...</span>
+    </div>
+    
+    <div id="logs"></div>
+    
+    <button onclick="testAuthStatus()">1. Test Auth Status</button>
+    <button onclick="testLogin()">2. Test Login Redirect</button>
+    <button onclick="testLogout()">3. Test Logout</button>
+    <button onclick="clearLogs()">Clear Logs</button>
+    
+    <script>
+        const BACKEND_URL = 'https://taskpages-backend.onrender.com';
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logDiv = document.createElement('div');
+            logDiv.className = `log ${type}`;
+            logDiv.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            document.getElementById('logs').appendChild(logDiv);
+            logDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        function setStatus(text, type = 'info') {
+            document.getElementById('status-text').textContent = text;
+            document.getElementById('status').className = `log ${type}`;
+        }
+        
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+        
+        async function testAuthStatus() {
+            log('🔍 Testing authentication status...', 'info');
+            
+            try {
+                log(`📡 Fetching: ${BACKEND_URL}/auth/status`, 'info');
+                
+                const response = await fetch(`${BACKEND_URL}/auth/status`, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                log(`📊 Response Status: ${response.status} ${response.statusText}`, 'info');
+                log(`🍪 Response Headers: ${JSON.stringify(Object.fromEntries(response.headers))}`, 'info');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ Auth Status Response: ${JSON.stringify(data, null, 2)}`, 'success');
+                    
+                    if (data.authenticated) {
+                        setStatus('Authenticated ✅', 'success');
+                    } else {
+                        setStatus('Not Authenticated ❌', 'error');
+                    }
+                } else {
+                    log(`❌ Auth status failed: ${response.status}`, 'error');
+                    setStatus('Auth Check Failed ❌', 'error');
+                }
+                
+            } catch (error) {
+                log(`💥 Auth status error: ${error.message}`, 'error');
+                log(`📋 Error details: ${JSON.stringify(error)}`, 'error');
+                setStatus('Auth Check Error ❌', 'error');
+            }
+        }
+        
+        async function testLogin() {
+            log('🚀 Testing login redirect...', 'info');
+            
+            try {
+                log(`📡 Checking: ${BACKEND_URL}/auth/login`, 'info');
+                
+                // First check if login endpoint is accessible
+                const response = await fetch(`${BACKEND_URL}/auth/login`, {
+                    method: 'HEAD',
+                    credentials: 'include'
+                });
+                
+                log(`📊 Login endpoint status: ${response.status}`, 'info');
+                
+                if (response.status === 302) {
+                    log('✅ Login endpoint returns redirect (good!)', 'success');
+                    log('🔄 Now redirecting to login...', 'info');
+                    
+                    // Actually redirect
+                    window.location.href = `${BACKEND_URL}/auth/login`;
+                } else {
+                    log(`❌ Unexpected login response: ${response.status}`, 'error');
+                }
+                
+            } catch (error) {
+                log(`💥 Login test error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testLogout() {
+            log('🚪 Testing logout...', 'info');
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/auth/logout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                log(`📊 Logout Status: ${response.status}`, 'info');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ Logout Response: ${JSON.stringify(data)}`, 'success');
+                    setStatus('Logged Out ✅', 'success');
+                } else {
+                    log(`❌ Logout failed: ${response.status}`, 'error');
+                }
+                
+            } catch (error) {
+                log(`💥 Logout error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Auto-run basic checks on load
+        window.addEventListener('DOMContentLoaded', () => {
+            log('🎬 Page loaded, starting diagnostics...', 'info');
+            log(`🌐 Current URL: ${window.location.href}`, 'info');
+            log(`🖥️ User Agent: ${navigator.userAgent}`, 'info');
+            log(`🍪 Cookies: ${document.cookie || 'None'}`, 'info');
+            
+            // Check for auth success parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('auth') === 'success') {
+                log('✅ Detected successful OAuth return!', 'success');
+                setStatus('OAuth Success Detected! 🎉', 'success');
+                
+                // Clean URL
+                const newUrl = window.location.href.replace(/[?&]auth=success/, '');
+                window.history.replaceState({}, document.title, newUrl);
+                
+                // Test auth status after OAuth
+                setTimeout(testAuthStatus, 1000);
+            } else {
+                // Test auth status on normal load
+                setTimeout(testAuthStatus, 500);
+            }
+        });
+    </script>
+</body>
+</html>
