@@ -754,6 +754,149 @@
         );
     }
 
+    // Comments Section Component
+    function CommentsSection({ mainTask }) {
+        const [comments, setComments] = useState([]);
+        const [loading, setLoading] = useState(false);
+        const [hasMore, setHasMore] = useState(false);
+        const [expanded, setExpanded] = useState(false);
+
+        // Fetch comments when component mounts or mainTask changes
+        useEffect(() => {
+            if (mainTask && mainTask.id) {
+                loadInitialComments();
+            }
+        }, [mainTask]);
+
+        const loadInitialComments = async () => {
+            if (!mainTask || !mainTask.id) return;
+            
+            setLoading(true);
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/task/${mainTask.id}/comments?limit=5`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setComments(data.comments || []);
+                    setHasMore(data.has_more || false);
+                } else {
+                    console.error('Failed to fetch comments:', response.statusText);
+                }
+            } catch (error) {
+                console.error('Error fetching comments:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const loadMoreComments = async () => {
+            if (!mainTask || !mainTask.id || loading) return;
+            
+            setLoading(true);
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/task/${mainTask.id}/comments?start=${comments.length}&limit=5`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setComments(prev => [...prev, ...(data.comments || [])]);
+                    setHasMore(data.has_more || false);
+                }
+            } catch (error) {
+                console.error('Error loading more comments:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (!mainTask) return null;
+
+        return (
+            <div className="border-t border-gray-200 bg-white">
+                <div 
+                    className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                    onClick={() => setExpanded(!expanded)}
+                >
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Recent Activity
+                            {comments.length > 0 && (
+                                <span className="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs font-normal">
+                                    {comments.length}
+                                </span>
+                            )}
+                        </h3>
+                        <svg 
+                            className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`}
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                    </div>
+                </div>
+
+                {expanded && (
+                    <div className="px-4 pb-4">
+                        {loading && comments.length === 0 ? (
+                            <div className="text-center py-4 text-gray-500 text-sm">
+                                Loading comments...
+                            </div>
+                        ) : comments.length === 0 ? (
+                            <div className="text-center py-4 text-gray-500 text-sm">
+                                No comments yet
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {comments.map((comment) => (
+                                    <div key={comment.id} className="border-l-2 border-gray-200 pl-3">
+                                        <div className="flex items-start gap-2">
+                                            <div 
+                                                className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium text-white flex-shrink-0"
+                                                style={{ backgroundColor: comment.user.color || '#808080' }}
+                                            >
+                                                {comment.user.initials}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                    <span className="font-medium">{comment.user.username}</span>
+                                                    <span>•</span>
+                                                    <span>{comment.date_formatted}</span>
+                                                </div>
+                                                <div className="text-sm text-gray-700 mt-1 break-words">
+                                                    {comment.text.length > 100 ? (
+                                                        <>
+                                                            {comment.text.substring(0, 100)}...
+                                                            <button className="text-blue-600 text-xs ml-1 hover:underline">
+                                                                show more
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        comment.text
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {hasMore && (
+                                    <div className="text-center pt-2">
+                                        <button
+                                            onClick={loadMoreComments}
+                                            disabled={loading}
+                                            className="text-xs text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50"
+                                        >
+                                            {loading ? 'Loading...' : 'Load more'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     // Left Panel Component for Main Task
     function MainTaskPanel({ mainTask }) {
         if (!mainTask) return null;
@@ -967,6 +1110,9 @@
                         </details>
                     </div>
                 )}
+
+                {/* Section 4: Recent Activity */}
+                <CommentsSection mainTask={mainTask} />
             </div>
         );
     }

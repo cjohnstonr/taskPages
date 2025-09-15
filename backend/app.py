@@ -172,6 +172,92 @@ class ClickUpService:
         
         sorted_subtasks = sorted(subtask_details, key=get_step_number)
         return sorted_subtasks
+    
+    def fetch_task_comments(self, task_id: str, start: int = 0, limit: int = 20) -> Dict[str, Any]:
+        """Fetch comments for a task with pagination"""
+        url = f"{CLICKUP_BASE_URL}/task/{task_id}/comment"
+        params = {
+            "start": start,
+            "limit": limit
+        }
+        
+        response = requests.get(url, headers=self.headers, params=params)
+        
+        if response.status_code != 200:
+            logger.error(f"Failed to get comments for task {task_id}: {response.text}")
+            response.raise_for_status()
+        
+        data = response.json()
+        comments = data.get('comments', [])
+        
+        # Normalize comments
+        normalized_comments = self.normalize_comments(comments)
+        
+        return {
+            "comments": normalized_comments,
+            "has_more": len(comments) >= limit
+        }
+    
+    def normalize_comments(self, raw_comments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Normalize comment data for consistent format"""
+        normalized = []
+        
+        for comment in raw_comments:
+            # Skip bot and system comments by default
+            username = comment.get('user', {}).get('username', '')
+            if 'bot' in username.lower() or comment.get('type') == 'system':
+                continue
+                
+            normalized.append({
+                'id': comment.get('id'),
+                'text': comment.get('comment_text', ''),
+                'user': {
+                    'id': comment.get('user', {}).get('id'),
+                    'username': comment.get('user', {}).get('username', 'Unknown'),
+                    'email': comment.get('user', {}).get('email', ''),
+                    'initials': comment.get('user', {}).get('initials', 
+                                          comment.get('user', {}).get('username', 'U')[0:2].upper()),
+                    'color': comment.get('user', {}).get('color', '#808080')
+                },
+                'date': comment.get('date'),
+                'date_formatted': self.format_relative_time(comment.get('date')),
+                'resolved': comment.get('resolved', False),
+                'assignee': comment.get('assignee'),
+                'reactions': comment.get('reactions', [])
+            })
+        
+        return normalized
+    
+    def format_relative_time(self, timestamp: str) -> str:
+        """Format timestamp as relative time (e.g., '2 hours ago')"""
+        if not timestamp:
+            return 'Unknown'
+        
+        try:
+            import time
+            from datetime import datetime
+            
+            # Convert timestamp to datetime
+            comment_time = datetime.fromtimestamp(int(timestamp) / 1000)
+            now = datetime.now()
+            
+            diff = now - comment_time
+            
+            if diff.days > 7:
+                return comment_time.strftime('%b %d, %Y')
+            elif diff.days > 0:
+                return f"{diff.days} day{'s' if diff.days > 1 else ''} ago"
+            elif diff.seconds > 3600:
+                hours = diff.seconds // 3600
+                return f"{hours} hour{'s' if hours > 1 else ''} ago"
+            elif diff.seconds > 60:
+                minutes = diff.seconds // 60
+                return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+            else:
+                return "Just now"
+        except Exception as e:
+            logger.error(f"Error formatting time: {e}")
+            return 'Unknown'
 
 
 # Initialize service
@@ -193,6 +279,9 @@ def initialize_wait_node(task_id):
     try:
         logger.info(f"Initializing wait node for task: {task_id}")
         
+        # Check if comments should be included
+        include_comments = request.args.get('include_comments', 'true').lower() == 'true'
+        
         # Find process library root
         root_task = clickup_service.find_process_library_root(task_id)
         if not root_task:
@@ -207,11 +296,25 @@ def initialize_wait_node(task_id):
         # Get all subtasks
         subtasks = clickup_service.fetch_subtasks_with_details(root_task['id'])
         
+        # Get initial comments for main task if requested
+        main_task_comments = None
+        if include_comments and main_task:
+            try:
+                main_task_comments = clickup_service.fetch_task_comments(
+                    main_task['id'], 
+                    start=0, 
+                    limit=10
+                )
+            except Exception as e:
+                logger.error(f"Failed to fetch comments for main task: {e}")
+                main_task_comments = {"comments": [], "has_more": False}
+        
         return jsonify({
             "root_task": root_task,
             "wait_task": wait_task,
             "main_task": main_task,
-            "subtasks": subtasks
+            "subtasks": subtasks,
+            "main_task_comments": main_task_comments
         })
     
     except requests.exceptions.HTTPError as e:
@@ -339,6 +442,24 @@ def update_field(task_id, field_id):
         return jsonify({"error": str(e)}), e.response.status_code if e.response else 500
     except Exception as e:
         logger.error(f"Error in update_field: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/task/<task_id>/comments', methods=['GET'])
+def get_task_comments(task_id):
+    """Get comments for a task with pagination"""
+    try:
+        start = int(request.args.get('start', 0))
+        limit = int(request.args.get('limit', 20))
+        
+        comments_data = clickup_service.fetch_task_comments(task_id, start, limit)
+        return jsonify(comments_data)
+    
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"HTTP error in get_task_comments: {e}")
+        return jsonify({"error": str(e)}), e.response.status_code if e.response else 500
+    except Exception as e:
+        logger.error(f"Error in get_task_comments: {e}")
         return jsonify({"error": str(e)}), 500
 
 
