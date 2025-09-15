@@ -93,10 +93,12 @@
             try {
                 log(`📡 Checking: ${BACKEND_URL}/auth/login`, 'info');
                 
-                // First check if login endpoint is accessible
+                // Test login endpoint accessibility
+                log('🔍 Checking login endpoint response...', 'info');
                 const response = await fetch(`${BACKEND_URL}/auth/login`, {
-                    method: 'HEAD',
-                    credentials: 'include'
+                    method: 'GET',
+                    credentials: 'include',
+                    redirect: 'manual'  // Don't follow redirects, just see the response
                 });
                 
                 log(`📊 Login endpoint status: ${response.status}`, 'info');
