@@ -39,20 +39,38 @@ def init_redis(app):
     global redis_client
     redis_url = app.config.get('REDIS_URL', 'redis://localhost:6379/0')
     
-    redis_client = redis.from_url(
-        redis_url,
-        decode_responses=True,
-        socket_keepalive=True,
-        socket_keepalive_options={
-            1: 1,  # TCP_KEEPIDLE
-            2: 1,  # TCP_KEEPINTVL
-            3: 3,  # TCP_KEEPCNT
-        },
-        socket_connect_timeout=5,
-        retry_on_timeout=True,
-        max_connections=10,
-        health_check_interval=30
-    )
+    # Handle Render's internal Redis URL format
+    if 'red-' in redis_url and '.render.com' not in redis_url:
+        # Convert internal Render Redis ID to full URL
+        redis_id = redis_url.split('//')[1].split(':')[0]
+        redis_url = f'redis://{redis_id}.oregon-postgres.render.com'
+        logger.info(f"Using Render Redis URL: {redis_url}")
+    
+    try:
+        redis_client = redis.from_url(
+            redis_url,
+            decode_responses=True,
+            socket_keepalive=True,
+            socket_keepalive_options={
+                1: 1,  # TCP_KEEPIDLE
+                2: 1,  # TCP_KEEPINTVL
+                3: 3,  # TCP_KEEPCNT
+            },
+            socket_connect_timeout=5,
+            retry_on_timeout=True,
+            max_connections=10,
+            health_check_interval=30
+        )
+    except Exception as e:
+        logger.warning(f"Failed with keepalive options: {e}, trying simpler connection")
+        # Fallback to simpler connection for compatibility
+        redis_client = redis.from_url(
+            redis_url,
+            decode_responses=True,
+            socket_connect_timeout=5,
+            retry_on_timeout=True,
+            max_connections=10
+        )
     
     # Test connection
     try:
