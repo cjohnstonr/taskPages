@@ -22,9 +22,9 @@ class SecureConfig:
     SESSION_KEY_PREFIX = 'taskpages:session:'
     SESSION_COOKIE_NAME = 'taskpages_session'
     SESSION_COOKIE_SECURE = os.environ.get('FLASK_ENV') == 'production'  # HTTPS only in prod
-    SESSION_COOKIE_DOMAIN = '.onrender.com' if os.environ.get('FLASK_ENV') == 'production' else None  # Cross-subdomain support
+    SESSION_COOKIE_DOMAIN = None  # Don't set domain - let browser handle it
     SESSION_COOKIE_HTTPONLY = True  # No JavaScript access
-    SESSION_COOKIE_SAMESITE = 'None' if os.environ.get('FLASK_ENV') == 'production' else 'Lax'  # Cross-subdomain for production
+    SESSION_COOKIE_SAMESITE = 'Lax'  # Use Lax for better OAuth compatibility
     PERMANENT_SESSION_LIFETIME = timedelta(hours=24)  # Auto-expire after 24 hours
     
     # Redis Configuration

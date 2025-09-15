@@ -281,6 +281,12 @@ def login():
     # Ensure session modifications are saved
     session.modified = True
     
+    # DEBUG: Log what we're storing
+    logger.info(f"OAuth login initiated. Session ID: {session.get('session_id', 'None')}")
+    logger.info(f"Storing state: {state}")
+    logger.info(f"Session keys after storage: {list(session.keys())}")
+    logger.info(f"Session permanent: {session.permanent}")
+    
     # Build OAuth URL
     params = {
         'client_id': current_app.config['GOOGLE_CLIENT_ID'],
@@ -309,6 +315,12 @@ def callback():
     """
     Handle OAuth callback with comprehensive security checks
     """
+    # DEBUG: Log session state at callback entry
+    logger.info(f"OAuth callback received. Session ID: {session.get('session_id', 'None')}")
+    logger.info(f"Session keys: {list(session.keys())}")
+    logger.info(f"OAuth state in session: {session.get('oauth_state', 'None')}")
+    logger.info(f"Request args: {dict(request.args)}")
+    
     # Check for errors from Google
     error = request.args.get('error')
     if error:
@@ -317,8 +329,12 @@ def callback():
     
     # Verify CSRF state token
     state = request.args.get('state')
+    stored_state = session.get('oauth_state')
+    logger.info(f"State verification: received='{state}', stored='{stored_state}'")
+    
     if not verify_csrf_token(state):
         logger.warning(f"CSRF token verification failed from IP: {request.remote_addr}")
+        logger.warning(f"State mismatch: received='{state}', stored='{stored_state}'")
         abort(403, "Invalid state parameter - possible CSRF attack")
     
     # Check timestamp to prevent replay attacks

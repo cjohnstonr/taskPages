@@ -54,10 +54,12 @@ class SecurityMiddleware:
             f"[{g.request_id}]"
         )
         
-        # Check for suspicious patterns
-        if self._is_suspicious_request():
-            logger.warning(f"Suspicious request blocked: {g.request_id}")
-            return jsonify({'error': 'Invalid request'}), 400
+        # Skip suspicious pattern checking for OAuth callbacks
+        if request.path != '/auth/callback':
+            # Check for suspicious patterns
+            if self._is_suspicious_request():
+                logger.warning(f"Suspicious request blocked: {g.request_id}")
+                return jsonify({'error': 'Invalid request'}), 400
         
         # Validate content type for POST/PUT requests
         if request.method in ['POST', 'PUT', 'PATCH']:
@@ -125,7 +127,7 @@ class SecurityMiddleware:
         for key, value in request.args.items():
             value_lower = str(value).lower()
             if any(pattern in value_lower for pattern in suspicious_patterns):
-                logger.warning(f"Suspicious pattern in URL param: {key}={value[:50]}")
+                logger.warning(f"Suspicious pattern in URL param: {key}={value[:50]} (pattern detected)")
                 return True
         
         # Check form data
