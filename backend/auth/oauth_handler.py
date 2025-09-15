@@ -396,6 +396,7 @@ def callback():
         redirect_url = f"{current_app.config['FRONTEND_URL']}?auth=success"
     
     logger.info(f"Successful login for: {user_info.get('email')}")
+    logger.info(f"Redirecting to: {redirect_url}")
     
     return redirect(redirect_url)
 
