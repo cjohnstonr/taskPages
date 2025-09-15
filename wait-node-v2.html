@@ -760,6 +760,7 @@
         const [loading, setLoading] = useState(false);
         const [hasMore, setHasMore] = useState(false);
         const [expanded, setExpanded] = useState(false);
+        const [expandedComments, setExpandedComments] = useState(new Set());
 
         // Fetch comments when component mounts or mainTask changes
         useEffect(() => {
@@ -804,6 +805,18 @@
             } finally {
                 setLoading(false);
             }
+        };
+
+        const toggleCommentExpansion = (commentId) => {
+            setExpandedComments(prev => {
+                const newSet = new Set(prev);
+                if (newSet.has(commentId)) {
+                    newSet.delete(commentId);
+                } else {
+                    newSet.add(commentId);
+                }
+                return newSet;
+            });
         };
 
         if (!mainTask) return null;
@@ -864,9 +877,15 @@
                                                 <div className="text-sm text-gray-700 mt-1 break-words">
                                                     {comment.text.length > 100 ? (
                                                         <>
-                                                            {comment.text.substring(0, 100)}...
-                                                            <button className="text-blue-600 text-xs ml-1 hover:underline">
-                                                                show more
+                                                            {expandedComments.has(comment.id) 
+                                                                ? comment.text 
+                                                                : `${comment.text.substring(0, 100)}...`
+                                                            }
+                                                            <button 
+                                                                onClick={() => toggleCommentExpansion(comment.id)}
+                                                                className="text-blue-600 text-xs ml-1 hover:underline cursor-pointer"
+                                                            >
+                                                                {expandedComments.has(comment.id) ? 'show less' : 'show more'}
                                                             </button>
                                                         </>
                                                     ) : (

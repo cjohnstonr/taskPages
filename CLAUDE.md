@@ -65,4 +65,11 @@ cat ./claude-commands/import-guides.md
 ```
 
 ## Sprint Management
-CURRENT_SPRINT: None
+CURRENT_SPRINT: 001-oauth-authentication-debugging
+SPRINT_COUNT: 1
+STARTED: 2025-09-15
+TODO_COUNT: 6
+COMPLETED: 6
+
+### Sprint History
+- 001-oauth-authentication-debugging (current)
