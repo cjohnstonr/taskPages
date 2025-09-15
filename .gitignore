@@ -13,6 +13,12 @@ ENV/
 .env
 backend/.env
 
+# Google OAuth credentials - NEVER commit these!
+client_secret_*.json
+*client_secret*.json
+credentials.json
+google-credentials.json
+
 # Logs
 *.log
 backend/server.log
