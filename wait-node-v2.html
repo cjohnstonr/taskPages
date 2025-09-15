@@ -1075,10 +1075,10 @@
 
                             {/* Process Library Root Info - Expandable Context */}
                             {processLibraryRoot && (
-                        <div style={{
-                            backgroundColor: '#0A0A0A',
-                            borderBottom: '0.5px solid #2A2A2A'
-                        }}>
+                                <div style={{
+                                    backgroundColor: '#0A0A0A',
+                                    borderBottom: '0.5px solid #2A2A2A'
+                                }}>
                             <div
                                 onClick={() => setExpandedContext(!expandedContext)}
                                 style={{
@@ -1195,64 +1195,63 @@
                                         No task description available
                                     </div>
                                 )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Process Context */}
-                    {processText && (
-                        <div className="p-5 border-b border-gray-200">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-3">
-                                📋 Process Context
-                            </h3>
-                            <div className="bg-yellow-50 p-4 rounded-lg font-mono text-sm text-gray-700 whitespace-pre-wrap">
-                                {processText}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Process Steps Accordion */}
-                    <ProcessStepsAccordion subtasks={subtasks} />
-
-                    {/* Approval Module - Only show for wait nodes */}
-                    {taskData && getCustomField(taskData, FIELD_IDS.WAIT_CONFIG) ? (
-                        <ApprovalModule
-                            taskData={taskData}
-                            onSuccess={() => {
-                                // Optional: refresh the page or show a success message
-                                console.log('Approval submitted successfully');
-                            }}
-                        />
-                    ) : (
-                        <div className="p-5 bg-gray-50 border-t border-gray-200">
-                            <div className="text-center">
-                                <p className="text-gray-600">This is not a wait node task. Viewing process steps only.</p>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Summary Stats */}
-                    <div className="p-5 bg-gray-50 border-t border-gray-200">
-                        <div className="grid grid-cols-3 gap-4 text-center">
-                            <div>
-                                <div className="text-2xl font-bold text-gray-900">{subtasks.length}</div>
-                                <div className="text-sm text-gray-600">Total Steps</div>
-                            </div>
-                            <div>
-                                <div className="text-2xl font-bold text-green-600">
-                                    {subtasks.filter(s => getCustomField(s, FIELD_IDS.EXECUTED)).length}
                                 </div>
-                                <div className="text-sm text-gray-600">Executed</div>
                             </div>
-                            <div>
-                                <div className="text-2xl font-bold text-gray-400">
-                                    {subtasks.filter(s => !getCustomField(s, FIELD_IDS.EXECUTED)).length}
+                            )}
+
+                            {/* Process Context */}
+                            {processText && (
+                                <div className="p-5 border-b border-gray-200">
+                                    <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                                        📋 Process Context
+                                    </h3>
+                                    <div className="bg-yellow-50 p-4 rounded-lg font-mono text-sm text-gray-700 whitespace-pre-wrap">
+                                        {processText}
+                                    </div>
                                 </div>
-                                <div className="text-sm text-gray-600">Pending</div>
+                            )}
+
+                            {/* Process Steps Accordion */}
+                            <ProcessStepsAccordion subtasks={subtasks} />
+
+                            {/* Approval Module - Only show for wait nodes */}
+                            {taskData && getCustomField(taskData, FIELD_IDS.WAIT_CONFIG) ? (
+                                <ApprovalModule
+                                    taskData={taskData}
+                                    onSuccess={() => {
+                                        // Optional: refresh the page or show a success message
+                                        console.log('Approval submitted successfully');
+                                    }}
+                                />
+                            ) : (
+                                <div className="p-5 bg-gray-50 border-t border-gray-200">
+                                    <div className="text-center">
+                                        <p className="text-gray-600">This is not a wait node task. Viewing process steps only.</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Summary Stats */}
+                            <div className="p-5 bg-gray-50 border-t border-gray-200">
+                                <div className="grid grid-cols-3 gap-4 text-center">
+                                    <div>
+                                        <div className="text-2xl font-bold text-gray-900">{subtasks.length}</div>
+                                        <div className="text-sm text-gray-600">Total Steps</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-2xl font-bold text-green-600">
+                                            {subtasks.filter(s => getCustomField(s, FIELD_IDS.EXECUTED)).length}
+                                        </div>
+                                        <div className="text-sm text-gray-600">Executed</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-2xl font-bold text-gray-400">
+                                            {subtasks.filter(s => !getCustomField(s, FIELD_IDS.EXECUTED)).length}
+                                        </div>
+                                        <div className="text-sm text-gray-600">Pending</div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
                         </div>
                     </div>
                 </div>

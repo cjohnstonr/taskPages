@@ -190,6 +190,10 @@ class RateLimiter:
         Check if rate limit is exceeded
         Returns True if within limit, False if exceeded
         """
+        # If Redis is not available, allow all requests
+        if not self.redis:
+            return True
+            
         if not limit:
             limit = self.default_limit
         else:

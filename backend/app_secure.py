@@ -41,18 +41,23 @@ app = Flask(__name__)
 SecureConfig.init_app(app)
 
 # Initialize Redis for sessions
-try:
-    redis_client = init_redis(app)
-    app.config['SESSION_REDIS'] = redis_client
-    Session(app)
-    logger.info("Redis session management initialized")
-except Exception as e:
-    logger.error(f"Failed to initialize Redis: {e}")
-    logger.warning("Running without Redis session management - OAuth will not work!")
+if os.environ.get('DISABLE_REDIS', 'false').lower() == 'true':
+    logger.warning("Redis disabled by environment variable - using filesystem sessions")
     redis_client = None
-    # Use filesystem sessions as fallback
     app.config['SESSION_TYPE'] = 'filesystem'
     Session(app)
+else:
+    try:
+        redis_client = init_redis(app)
+        app.config['SESSION_REDIS'] = redis_client
+        Session(app)
+        logger.info("Redis session management initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize Redis: {e}")
+        logger.warning("Falling back to filesystem sessions")
+        redis_client = None
+        app.config['SESSION_TYPE'] = 'filesystem'
+        Session(app)
 
 # Initialize security middleware
 security_middleware = SecurityMiddleware(app)

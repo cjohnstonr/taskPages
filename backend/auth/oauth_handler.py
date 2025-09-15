@@ -37,6 +37,13 @@ redis_client = None
 def init_redis(app):
     """Initialize Redis connection with security settings"""
     global redis_client
+    
+    # Check if Redis is disabled
+    if os.environ.get('DISABLE_REDIS', 'false').lower() == 'true':
+        logger.warning("Redis disabled - sessions will not persist across restarts")
+        redis_client = None
+        return None
+    
     redis_url = app.config.get('REDIS_URL', 'redis://localhost:6379/0')
     
     # Log the Redis URL we're trying to connect to (without exposing credentials)
@@ -145,7 +152,7 @@ def verify_google_token(token_string):
 
 def create_user_session(user_info):
     """
-    Create a secure user session in Redis
+    Create a secure user session (Redis or Flask session)
     """
     # Generate session ID
     session_id = secrets.token_urlsafe(32)
@@ -163,60 +170,73 @@ def create_user_session(user_info):
         'user_agent': request.headers.get('User-Agent', '')[:200]  # Limit length
     }
     
-    # Store in Redis with expiration
-    session_key = f"{current_app.config['SESSION_KEY_PREFIX']}{session_id}"
-    expiry = int(current_app.config['PERMANENT_SESSION_LIFETIME'].total_seconds())
-    
-    # Use pipeline for atomic operations
-    pipe = redis_client.pipeline()
-    pipe.setex(session_key, expiry, json.dumps(session_data))
-    
-    # Track user's sessions (for logout everywhere functionality)
-    user_sessions_key = f"user_sessions:{user_info.get('email')}"
-    pipe.sadd(user_sessions_key, session_id)
-    pipe.expire(user_sessions_key, expiry)
-    
-    pipe.execute()
+    if redis_client:
+        # Store in Redis with expiration
+        session_key = f"{current_app.config['SESSION_KEY_PREFIX']}{session_id}"
+        expiry = int(current_app.config['PERMANENT_SESSION_LIFETIME'].total_seconds())
+        
+        # Use pipeline for atomic operations
+        pipe = redis_client.pipeline()
+        pipe.setex(session_key, expiry, json.dumps(session_data))
+        
+        # Track user's sessions (for logout everywhere functionality)
+        user_sessions_key = f"user_sessions:{user_info.get('email')}"
+        pipe.sadd(user_sessions_key, session_id)
+        pipe.expire(user_sessions_key, expiry)
+        
+        pipe.execute()
+    else:
+        # Fallback to Flask session
+        session['user_data'] = session_data
     
     # Set session cookie
     session['session_id'] = session_id
     session['user_email'] = user_info.get('email')
     session.permanent = False  # Use session cookie, not permanent
     
-    logger.info(f"Session created for user: {user_info.get('email')}")
+    logger.info(f"Session created for user: {user_info.get('email')} (Redis: {redis_client is not None})")
     
     return session_id
 
 
 def get_user_session():
     """
-    Retrieve and validate user session from Redis
+    Retrieve and validate user session (Redis or Flask session)
     """
     session_id = session.get('session_id')
     if not session_id:
         return None
     
-    session_key = f"{current_app.config['SESSION_KEY_PREFIX']}{session_id}"
-    session_data = redis_client.get(session_key)
-    
-    if not session_data:
-        # Session expired or doesn't exist
-        session.clear()
-        return None
-    
-    try:
-        user_data = json.loads(session_data)
+    if redis_client:
+        session_key = f"{current_app.config['SESSION_KEY_PREFIX']}{session_id}"
+        session_data = redis_client.get(session_key)
         
-        # Update last activity
-        user_data['last_activity'] = datetime.utcnow().isoformat()
-        expiry = int(current_app.config['PERMANENT_SESSION_LIFETIME'].total_seconds())
-        redis_client.setex(session_key, expiry, json.dumps(user_data))
+        if not session_data:
+            # Session expired or doesn't exist
+            session.clear()
+            return None
         
+        try:
+            user_data = json.loads(session_data)
+            
+            # Update last activity
+            user_data['last_activity'] = datetime.utcnow().isoformat()
+            expiry = int(current_app.config['PERMANENT_SESSION_LIFETIME'].total_seconds())
+            redis_client.setex(session_key, expiry, json.dumps(user_data))
+            
+            return user_data
+        except Exception as e:
+            logger.error(f"Failed to parse session data: {e}")
+            session.clear()
+            return None
+    else:
+        # Fallback to Flask session
+        user_data = session.get('user_data')
+        if user_data:
+            # Update last activity
+            user_data['last_activity'] = datetime.utcnow().isoformat()
+            session['user_data'] = user_data
         return user_data
-    except Exception as e:
-        logger.error(f"Failed to parse session data: {e}")
-        session.clear()
-        return None
 
 
 def login_required(f):
@@ -365,7 +385,7 @@ def logout():
     session_id = session.get('session_id')
     user_email = session.get('user_email')
     
-    if session_id:
+    if session_id and redis_client:
         # Remove session from Redis
         session_key = f"{current_app.config['SESSION_KEY_PREFIX']}{session_id}"
         redis_client.delete(session_key)
@@ -374,7 +394,8 @@ def logout():
         if user_email:
             user_sessions_key = f"user_sessions:{user_email}"
             redis_client.srem(user_sessions_key, session_id)
-        
+    
+    if user_email:
         logger.info(f"User logged out: {user_email}")
     
     # Clear Flask session
@@ -391,17 +412,18 @@ def logout_all():
     """
     user_email = request.user.get('email')
     
-    # Get all user sessions
-    user_sessions_key = f"user_sessions:{user_email}"
-    all_sessions = redis_client.smembers(user_sessions_key)
-    
-    # Delete all sessions
-    pipe = redis_client.pipeline()
-    for sid in all_sessions:
-        session_key = f"{current_app.config['SESSION_KEY_PREFIX']}{sid}"
-        pipe.delete(session_key)
-    pipe.delete(user_sessions_key)
-    pipe.execute()
+    if redis_client:
+        # Get all user sessions
+        user_sessions_key = f"user_sessions:{user_email}"
+        all_sessions = redis_client.smembers(user_sessions_key)
+        
+        # Delete all sessions
+        pipe = redis_client.pipeline()
+        for sid in all_sessions:
+            session_key = f"{current_app.config['SESSION_KEY_PREFIX']}{sid}"
+            pipe.delete(session_key)
+        pipe.delete(user_sessions_key)
+        pipe.execute()
     
     # Clear current session
     session.clear()
