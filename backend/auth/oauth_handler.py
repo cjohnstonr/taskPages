@@ -284,7 +284,7 @@ def login():
     # Build OAuth URL
     params = {
         'client_id': current_app.config['GOOGLE_CLIENT_ID'],
-        'redirect_uri': current_app.config.get_redirect_uri(),
+        'redirect_uri': f"{current_app.config['BACKEND_URL']}/auth/callback",
         'response_type': 'code',
         'scope': 'openid email profile',
         'state': state,
@@ -340,7 +340,7 @@ def callback():
         'code': code,
         'client_id': current_app.config['GOOGLE_CLIENT_ID'],
         'client_secret': current_app.config['GOOGLE_CLIENT_SECRET'],
-        'redirect_uri': current_app.config.get_redirect_uri(),
+        'redirect_uri': f"{current_app.config['BACKEND_URL']}/auth/callback",
         'grant_type': 'authorization_code'
     }
     
@@ -372,7 +372,8 @@ def callback():
     
     # Determine redirect URL
     next_url = session.pop('next_url', None)
-    if next_url and current_app.config.is_safe_url(next_url):
+    # Simple URL safety check
+    if next_url and next_url.startswith(('/', current_app.config['FRONTEND_URL'])):
         redirect_url = next_url
     else:
         # Redirect to frontend with success indicator
