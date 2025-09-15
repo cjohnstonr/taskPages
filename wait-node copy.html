@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wait Node Approval</title>
+    <title>Process Library Viewer</title>
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -404,6 +404,11 @@
 
 
     function cleanJSON(value) {
+        // Handle null/undefined values
+        if (!value) {
+            return null;
+        }
+        
         let cleaned = value.trim();
 
         // Remover comillas externas dobles y simples
@@ -418,7 +423,12 @@
         cleaned = cleaned.replace(/\\"/g, '"');      // \" -> "
         cleaned = cleaned.replace(/\\\\/g, '\\');    // \\\\ -> \\
 
-        return JSON.parse(cleaned.trim());
+        try {
+            return JSON.parse(cleaned.trim());
+        } catch (e) {
+            console.warn('Failed to parse JSON config:', e);
+            return null;
+        }
     }
 
     // Approval Module Component
@@ -431,8 +441,11 @@
         // Extract relevant fields
         const waitConfig = useMemo(() => {
             const configString = getCustomField(taskData, FIELD_IDS.WAIT_CONFIG);
-            return cleanJSON(configString)
+            return configString ? cleanJSON(configString) : null;
         }, [taskData]);
+        
+        // Check if this is actually a wait node
+        const isWaitNode = waitConfig !== null;
 
         const aiProposedAction = getCustomField(taskData, FIELD_IDS.AI_PROPOSED_ACTION) || 'No action proposed';
         const aiProposedValue = getCustomField(taskData, FIELD_IDS.AI_PROPOSED_VALUE) || '';
@@ -822,10 +835,14 @@
                 <div className="max-w-5xl mx-auto bg-white shadow-lg">
                     {/* Header */}
                     <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6">
-                        <h1 className="text-2xl font-bold">Wait Node Approval</h1>
+                        <h1 className="text-2xl font-bold">
+                            {getCustomField(taskData, FIELD_IDS.WAIT_CONFIG) ? 'Wait Node Approval' : 'Process Library Viewer'}
+                        </h1>
                         <p className="mt-2 opacity-90">{taskData.name}</p>
                         {taskData.custom_id && (
-                            <p className="text-sm opacity-75 mt-1">Wait Node: {taskData.custom_id}</p>
+                            <p className="text-sm opacity-75 mt-1">
+                                {getCustomField(taskData, FIELD_IDS.WAIT_CONFIG) ? 'Wait Node: ' : 'Task: '}{taskData.custom_id}
+                            </p>
                         )}
                     </div>
 
@@ -970,14 +987,22 @@
                     {/* Process Steps Accordion */}
                     <ProcessStepsAccordion subtasks={subtasks} />
 
-                    {/* Approval Module */}
-                    <ApprovalModule
-                        taskData={taskData}
-                        onSuccess={() => {
-                            // Optional: refresh the page or show a success message
-                            console.log('Approval submitted successfully');
-                        }}
-                    />
+                    {/* Approval Module - Only show for wait nodes */}
+                    {taskData && getCustomField(taskData, FIELD_IDS.WAIT_CONFIG) ? (
+                        <ApprovalModule
+                            taskData={taskData}
+                            onSuccess={() => {
+                                // Optional: refresh the page or show a success message
+                                console.log('Approval submitted successfully');
+                            }}
+                        />
+                    ) : (
+                        <div className="p-5 bg-gray-50 border-t border-gray-200">
+                            <div className="text-center">
+                                <p className="text-gray-600">This is not a wait node task. Viewing process steps only.</p>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Summary Stats */}
                     <div className="p-5 bg-gray-50 border-t border-gray-200">
