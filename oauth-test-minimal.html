@@ -31,6 +31,19 @@
     <script>
         const BACKEND_URL = 'https://taskpages-backend.onrender.com';
         
+        // Token management functions
+        function getAuthToken() {
+            return localStorage.getItem('auth_token');
+        }
+        
+        function setAuthToken(token) {
+            localStorage.setItem('auth_token', token);
+        }
+        
+        function clearAuthToken() {
+            localStorage.removeItem('auth_token');
+        }
+        
         function log(message, type = 'info') {
             const timestamp = new Date().toLocaleTimeString();
             const logDiv = document.createElement('div');
@@ -53,14 +66,23 @@
             log('🔍 Testing authentication status...', 'info');
             
             try {
+                const authToken = getAuthToken();
+                log(`🔑 Auth token present: ${authToken ? 'Yes' : 'No'}`, 'info');
                 log(`📡 Fetching: ${BACKEND_URL}/auth/status`, 'info');
+                
+                const headers = {
+                    'Accept': 'application/json'
+                };
+                
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                    log('🔐 Including Authorization header', 'info');
+                }
                 
                 const response = await fetch(`${BACKEND_URL}/auth/status`, {
                     method: 'GET',
                     credentials: 'include',
-                    headers: {
-                        'Accept': 'application/json'
-                    }
+                    headers: headers
                 });
                 
                 log(`📊 Response Status: ${response.status} ${response.statusText}`, 'info');
@@ -132,25 +154,73 @@
             }
         }
         
+        async function exchangeToken(tempToken) {
+            log(`🔄 Exchanging temporary token for API token...`, 'info');
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/auth/exchange-token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ token: tempToken })
+                });
+                
+                log(`📊 Exchange response: ${response.status}`, 'info');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        setAuthToken(data.api_token);
+                        log(`✅ Token exchanged successfully! User: ${data.user.email}`, 'success');
+                        log(`🔐 API token stored in localStorage`, 'success');
+                        return data;
+                    }
+                }
+                return null;
+            } catch (error) {
+                log(`💥 Token exchange error: ${error.message}`, 'error');
+                return null;
+            }
+        }
+        
         // Auto-run basic checks on load
-        window.addEventListener('DOMContentLoaded', () => {
+        window.addEventListener('DOMContentLoaded', async () => {
             log('🎬 Page loaded, starting diagnostics...', 'info');
             log(`🌐 Current URL: ${window.location.href}`, 'info');
             log(`🖥️ User Agent: ${navigator.userAgent}`, 'info');
             log(`🍪 Cookies: ${document.cookie || 'None'}`, 'info');
+            log(`🔑 Stored auth token: ${getAuthToken() ? 'Present' : 'None'}`, 'info');
             
             // Check for auth success parameter
             const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('auth') === 'success') {
-                log('✅ Detected successful OAuth return!', 'success');
-                setStatus('OAuth Success Detected! 🎉', 'success');
+            const authSuccess = urlParams.get('auth') === 'success';
+            const tempToken = urlParams.get('token');
+            
+            if (authSuccess && tempToken) {
+                log('✅ Detected successful OAuth return with token!', 'success');
+                log(`🎟️ Temporary token received: ${tempToken.substring(0, 10)}...`, 'info');
+                
+                // Exchange the temporary token
+                const exchangeResult = await exchangeToken(tempToken);
+                
+                if (exchangeResult) {
+                    setStatus(`OAuth Success! Logged in as ${exchangeResult.user.email} 🎉`, 'success');
+                } else {
+                    setStatus('Token exchange failed ❌', 'error');
+                    clearAuthToken();
+                }
                 
                 // Clean URL
-                const newUrl = window.location.href.replace(/[?&]auth=success/, '');
+                const newUrl = window.location.pathname;
                 window.history.replaceState({}, document.title, newUrl);
                 
                 // Test auth status after OAuth
                 setTimeout(testAuthStatus, 1000);
+            } else if (authSuccess) {
+                log('⚠️ OAuth success but no token received', 'error');
+                setStatus('OAuth incomplete - no token ⚠️', 'error');
             } else {
                 // Test auth status on normal load
                 setTimeout(testAuthStatus, 500);

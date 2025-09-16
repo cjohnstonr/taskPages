@@ -95,6 +95,44 @@
     <script>
         const BACKEND_URL = 'https://taskpages-backend.onrender.com';
         
+        // Token management functions
+        function getAuthToken() {
+            return localStorage.getItem('auth_token');
+        }
+        
+        function setAuthToken(token) {
+            localStorage.setItem('auth_token', token);
+        }
+        
+        function clearAuthToken() {
+            localStorage.removeItem('auth_token');
+        }
+        
+        async function exchangeToken(tempToken) {
+            try {
+                const response = await fetch(`${BACKEND_URL}/auth/exchange-token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ token: tempToken })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        setAuthToken(data.api_token);
+                        return data;
+                    }
+                }
+                return null;
+            } catch (error) {
+                console.error('Token exchange error:', error);
+                return null;
+            }
+        }
+        
         async function checkAuth() {
             const statusEl = document.getElementById('status');
             const linksEl = document.getElementById('links');
@@ -102,34 +140,53 @@
             // Check if we're returning from OAuth
             const urlParams = new URLSearchParams(window.location.search);
             const authSuccess = urlParams.get('auth') === 'success';
+            const tempToken = urlParams.get('token');
             
-            if (authSuccess) {
+            if (authSuccess && tempToken) {
+                // Exchange temporary token for long-lived token
+                statusEl.innerHTML = '<div class="spinner"></div>Exchanging authentication token...';
+                
+                const exchangeResult = await exchangeToken(tempToken);
+                
                 // Clean URL
                 window.history.replaceState({}, document.title, window.location.pathname);
                 
-                statusEl.className = 'status success';
-                statusEl.innerHTML = '✅ Authentication successful! Welcome back.';
-                linksEl.style.display = 'block';
-                
-                // Check if we should redirect somewhere specific
-                const redirectUrl = sessionStorage.getItem('redirect_after_login');
-                if (redirectUrl) {
-                    sessionStorage.removeItem('redirect_after_login');
-                    statusEl.innerHTML += '<br>Redirecting you back...';
-                    setTimeout(() => {
-                        window.location.href = redirectUrl;
-                    }, 1500);
-                    return;
+                if (exchangeResult) {
+                    statusEl.className = 'status success';
+                    statusEl.innerHTML = `✅ Authentication successful! Welcome ${exchangeResult.user.email}`;
+                    linksEl.style.display = 'block';
+                    
+                    // Check if we should redirect somewhere specific
+                    const redirectUrl = sessionStorage.getItem('redirect_after_login');
+                    if (redirectUrl) {
+                        sessionStorage.removeItem('redirect_after_login');
+                        statusEl.innerHTML += '<br>Redirecting you back...';
+                        setTimeout(() => {
+                            window.location.href = redirectUrl;
+                        }, 1500);
+                        return;
+                    }
+                } else {
+                    statusEl.className = 'status error';
+                    statusEl.innerHTML = 'Failed to complete authentication. Please try again.';
+                    clearAuthToken();
                 }
             }
             
-            // Check authentication status
+            // Check authentication status with token
             try {
+                const authToken = getAuthToken();
+                const headers = {
+                    'Accept': 'application/json'
+                };
+                
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
                 const response = await fetch(`${BACKEND_URL}/auth/status`, {
                     credentials: 'include',
-                    headers: {
-                        'Accept': 'application/json'
-                    }
+                    headers: headers
                 });
                 
                 const data = await response.json();
@@ -139,6 +196,11 @@
                     statusEl.innerHTML = `✅ Authenticated as ${data.user.email}`;
                     linksEl.style.display = 'block';
                 } else {
+                    // Clear invalid token
+                    if (authToken) {
+                        clearAuthToken();
+                    }
+                    
                     statusEl.className = 'status info';
                     statusEl.innerHTML = `
                         Not authenticated. 

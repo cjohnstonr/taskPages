@@ -7,11 +7,14 @@ import os
 import logging
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_session import Session
 from dotenv import load_dotenv
 import requests
 from typing import Dict, Any, Optional, List
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from auth.oauth_handler import auth_bp, init_redis
+from config.security import SecureConfig
 
 # Load environment variables
 load_dotenv()
@@ -20,11 +23,34 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
+# Initialize Flask app with secure config
 app = Flask(__name__)
+SecureConfig.init_app(app)
 
-# Configure CORS - Allow all origins for local development
-CORS(app, origins="*", supports_credentials=True)
+# Initialize Redis for sessions
+try:
+    redis_client = init_redis(app)
+    if redis_client:
+        app.config['SESSION_REDIS'] = redis_client
+except Exception as e:
+    logger.warning(f"Redis initialization failed: {e}")
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['SESSION_FILE_DIR'] = '/tmp/flask_sessions'
+
+# Initialize Flask-Session
+Session(app)
+
+# Configure CORS with secure settings
+CORS(app, 
+    origins=SecureConfig.CORS_ORIGINS,
+    supports_credentials=SecureConfig.CORS_SUPPORTS_CREDENTIALS,
+    methods=SecureConfig.CORS_METHODS,
+    allow_headers=SecureConfig.CORS_ALLOW_HEADERS,
+    max_age=SecureConfig.CORS_MAX_AGE
+)
+
+# Register auth blueprint
+app.register_blueprint(auth_bp)
 
 # Configuration
 CLICKUP_API_KEY = os.getenv('CLICKUP_API_KEY')

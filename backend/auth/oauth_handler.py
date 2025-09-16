@@ -8,6 +8,8 @@ import logging
 from datetime import datetime, timedelta
 from functools import wraps
 from urllib.parse import urlencode, quote
+import hashlib
+import hmac
 
 import requests
 from flask import (
@@ -392,17 +394,39 @@ def callback():
     # Create user session
     session_id = create_user_session(user_info)
     
+    # Generate a secure authentication token for cross-domain use
+    auth_token = secrets.token_urlsafe(32)
+    
+    # Store token in Redis or session for validation
+    if redis_client:
+        token_key = f"auth_token:{auth_token}"
+        token_data = {
+            'session_id': session_id,
+            'email': user_info.get('email'),
+            'created_at': datetime.utcnow().isoformat()
+        }
+        # Token expires in 5 minutes - enough time for frontend to exchange it
+        redis_client.setex(token_key, 300, json.dumps(token_data))
+    else:
+        # Fallback: store in session
+        session[f'auth_token_{auth_token}'] = {
+            'session_id': session_id,
+            'email': user_info.get('email'),
+            'created_at': datetime.utcnow().isoformat()
+        }
+    
     # Determine redirect URL
     next_url = session.pop('next_url', None)
     # Simple URL safety check
     if next_url and next_url.startswith(('/', current_app.config['FRONTEND_URL'])):
-        redirect_url = next_url
+        redirect_url = f"{next_url}?auth=success&token={auth_token}"
     else:
-        # Redirect to frontend with success indicator
-        redirect_url = f"{current_app.config['FRONTEND_URL']}?auth=success"
+        # Redirect to frontend with success indicator and token
+        redirect_url = f"{current_app.config['FRONTEND_URL']}?auth=success&token={auth_token}"
     
     logger.info(f"Successful login for: {user_info.get('email')}")
-    logger.info(f"Redirecting to: {redirect_url}")
+    logger.info(f"Created auth token for cross-domain use")
+    logger.info(f"Redirecting to: {redirect_url.split('&token=')[0] + '&token=***'}")
     
     return redirect(redirect_url)
 
@@ -468,6 +492,27 @@ def auth_status():
     """
     Check authentication status
     """
+    # Check for token in Authorization header for cross-domain requests
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        token = auth_header.replace('Bearer ', '')
+        # Try API token first (long-lived token)
+        user_session = validate_api_token(token)
+        if not user_session:
+            # Try temporary auth token
+            user_session = validate_auth_token(token)
+        
+        if user_session:
+            return jsonify({
+                'authenticated': True,
+                'user': {
+                    'email': user_session.get('email'),
+                    'name': user_session.get('name'),
+                    'picture': user_session.get('picture')
+                }
+            }), 200
+    
+    # Fallback to cookie-based session
     user_session = get_user_session()
     
     if user_session:
@@ -491,3 +536,157 @@ def refresh_session():
     """
     # Session is automatically refreshed in get_user_session()
     return jsonify({'message': 'Session refreshed'}), 200
+
+
+def validate_auth_token(token):
+    """
+    Validate an authentication token and return session data
+    """
+    if not token:
+        return None
+    
+    if redis_client:
+        token_key = f"auth_token:{token}"
+        token_data = redis_client.get(token_key)
+        if not token_data:
+            return None
+        
+        try:
+            data = json.loads(token_data)
+            session_id = data.get('session_id')
+            
+            # Get the actual session data
+            session_key = f"{current_app.config['SESSION_KEY_PREFIX']}{session_id}"
+            session_data = redis_client.get(session_key)
+            
+            if session_data:
+                return json.loads(session_data)
+        except Exception as e:
+            logger.error(f"Error validating token: {e}")
+            return None
+    else:
+        # Fallback to session-based validation
+        token_data = session.get(f'auth_token_{token}')
+        if token_data:
+            session_id = token_data.get('session_id')
+            # Return the user data from session
+            return session.get('user_data')
+    
+    return None
+
+
+@auth_bp.route('/exchange-token', methods=['POST'])
+def exchange_token():
+    """
+    Exchange a temporary auth token for a long-lived session token
+    """
+    data = request.json
+    temp_token = data.get('token')
+    
+    if not temp_token:
+        return jsonify({'error': 'No token provided'}), 400
+    
+    # Validate the temporary token
+    if redis_client:
+        token_key = f"auth_token:{temp_token}"
+        token_data = redis_client.get(token_key)
+        
+        if not token_data:
+            return jsonify({'error': 'Invalid or expired token'}), 401
+        
+        try:
+            data = json.loads(token_data)
+            session_id = data.get('session_id')
+            
+            # Get the actual session data
+            session_key = f"{current_app.config['SESSION_KEY_PREFIX']}{session_id}"
+            session_data = redis_client.get(session_key)
+            
+            if not session_data:
+                return jsonify({'error': 'Session not found'}), 401
+            
+            user_data = json.loads(session_data)
+            
+            # Create a long-lived API token
+            api_token = secrets.token_urlsafe(32)
+            api_token_key = f"api_token:{api_token}"
+            
+            # Store API token with longer expiry (24 hours)
+            expiry = int(current_app.config['PERMANENT_SESSION_LIFETIME'].total_seconds())
+            redis_client.setex(api_token_key, expiry, json.dumps({
+                'session_id': session_id,
+                'email': user_data.get('email'),
+                'created_at': datetime.utcnow().isoformat()
+            }))
+            
+            # Delete the temporary token
+            redis_client.delete(token_key)
+            
+            return jsonify({
+                'success': True,
+                'api_token': api_token,
+                'user': {
+                    'email': user_data.get('email'),
+                    'name': user_data.get('name'),
+                    'picture': user_data.get('picture')
+                }
+            }), 200
+            
+        except Exception as e:
+            logger.error(f"Error exchanging token: {e}")
+            return jsonify({'error': 'Token exchange failed'}), 500
+    else:
+        # Fallback for non-Redis setup
+        token_data = session.pop(f'auth_token_{temp_token}', None)
+        if not token_data:
+            return jsonify({'error': 'Invalid or expired token'}), 401
+        
+        user_data = session.get('user_data')
+        if not user_data:
+            return jsonify({'error': 'Session not found'}), 401
+        
+        # In non-Redis mode, return the session data directly
+        # The session cookie will maintain the auth
+        return jsonify({
+            'success': True,
+            'api_token': temp_token,  # Reuse the token in non-Redis mode
+            'user': {
+                'email': user_data.get('email'),
+                'name': user_data.get('name'),
+                'picture': user_data.get('picture')
+            }
+        }), 200
+
+
+def validate_api_token(token):
+    """
+    Validate a long-lived API token and return session data
+    """
+    if not token:
+        return None
+    
+    if redis_client:
+        api_token_key = f"api_token:{token}"
+        token_data = redis_client.get(api_token_key)
+        
+        if not token_data:
+            return None
+        
+        try:
+            data = json.loads(token_data)
+            session_id = data.get('session_id')
+            
+            # Get the actual session data
+            session_key = f"{current_app.config['SESSION_KEY_PREFIX']}{session_id}"
+            session_data = redis_client.get(session_key)
+            
+            if session_data:
+                # Refresh token expiry on each use
+                expiry = int(current_app.config['PERMANENT_SESSION_LIFETIME'].total_seconds())
+                redis_client.expire(api_token_key, expiry)
+                return json.loads(session_data)
+        except Exception as e:
+            logger.error(f"Error validating API token: {e}")
+            return None
+    
+    return None
