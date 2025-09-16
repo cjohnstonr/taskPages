@@ -142,10 +142,8 @@
     const { useState, useEffect, useMemo } = React;
 
     // Configuration - Using Python backend
-    // Handle file:// protocol and localhost
-    const BACKEND_URL = (!window.location.hostname || window.location.hostname === 'localhost' || window.location.protocol === 'file:')
-        ? 'http://localhost:5678' 
-        : 'https://taskpages-backend.onrender.com'; // Production backend URL on Render
+    // Use same origin since page is served from backend
+    const BACKEND_URL = window.location.origin;
     const PROCESS_LIBRARY_TYPE = 1018; // custom_item_id for Process Library tasks
 
     // Custom field IDs

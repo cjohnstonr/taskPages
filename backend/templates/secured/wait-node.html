@@ -141,8 +141,8 @@
 <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    // Configuration - Using secure backend
-    const BACKEND_URL = 'https://taskpages-backend.onrender.com';
+    // Configuration - Use same origin since page is served from backend
+    const BACKEND_URL = window.location.origin;
     const TEAM_ID = '9011954126';
     const PROCESS_LIBRARY_TYPE = 1018; // custom_item_id for Process Library tasks
 

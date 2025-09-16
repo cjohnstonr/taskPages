@@ -1,87 +1,58 @@
 """
-Secure Flask backend server with Google OAuth authentication
-Handles ClickUp API interactions with authentication and security
+Flask backend server for Wait Node API
+Handles all ClickUp API interactions for the wait-node.html frontend
 """
 
 import os
-import sys
 import logging
-from datetime import datetime
-from pathlib import Path
-
-from flask import Flask, request, jsonify, session, render_template
-from flask_session import Session
+from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_session import Session
 from dotenv import load_dotenv
-import redis
 import requests
 from typing import Dict, Any, Optional, List
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
-
-# Add parent directory to path for imports
-sys.path.append(str(Path(__file__).parent))
-
-# Import security modules
+from auth.oauth_handler import auth_bp, init_redis
 from config.security import SecureConfig
-from auth.oauth_handler import auth_bp, init_redis, login_required
-from auth.security_middleware import SecurityMiddleware, RateLimiter
 
 # Load environment variables
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app with security config
+# Initialize Flask app with secure config
 app = Flask(__name__)
 SecureConfig.init_app(app)
 
 # Initialize Redis for sessions
-if os.environ.get('DISABLE_REDIS', 'false').lower() == 'true':
-    logger.warning("Redis disabled by environment variable - using filesystem sessions")
-    redis_client = None
-    app.config['SESSION_TYPE'] = 'filesystem'
-    # Fix for Python 3.13 compatibility
-    app.config['SESSION_FILE_DIR'] = '/tmp/flask_session'
-    app.config['SESSION_FILE_THRESHOLD'] = 100
-    Session(app)
-else:
-    try:
-        redis_client = init_redis(app)
+try:
+    redis_client = init_redis(app)
+    if redis_client:
         app.config['SESSION_REDIS'] = redis_client
-        Session(app)
-        logger.info("Redis session management initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize Redis: {e}")
-        logger.warning("Falling back to filesystem sessions")
-        redis_client = None
-        app.config['SESSION_TYPE'] = 'filesystem'
-        # Fix for Python 3.13 compatibility
-        app.config['SESSION_FILE_DIR'] = '/tmp/flask_session'
-        app.config['SESSION_FILE_THRESHOLD'] = 100
-        Session(app)
+except Exception as e:
+    logger.warning(f"Redis initialization failed: {e}")
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['SESSION_FILE_DIR'] = '/tmp/flask_sessions'
 
-# Initialize security middleware
-security_middleware = SecurityMiddleware(app)
+# Initialize Flask-Session
+Session(app)
 
-# Initialize rate limiter
-rate_limiter = RateLimiter(redis_client, default_limit='100 per hour')
-
-# Configure CORS with security
+# Configure CORS with secure settings
 CORS(app, 
-     origins=app.config['CORS_ORIGINS'],
-     supports_credentials=app.config['CORS_SUPPORTS_CREDENTIALS'],
-     methods=app.config['CORS_METHODS'],
-     allow_headers=app.config['CORS_ALLOW_HEADERS'])
+    origins=SecureConfig.CORS_ORIGINS,
+    supports_credentials=SecureConfig.CORS_SUPPORTS_CREDENTIALS,
+    methods=SecureConfig.CORS_METHODS,
+    allow_headers=SecureConfig.CORS_ALLOW_HEADERS,
+    max_age=SecureConfig.CORS_MAX_AGE
+)
 
-# Register authentication blueprint
+# Register auth blueprint
 app.register_blueprint(auth_bp)
 
-# ClickUp API Configuration
+# Configuration
 CLICKUP_API_KEY = os.getenv('CLICKUP_API_KEY')
 CLICKUP_TEAM_ID = os.getenv('CLICKUP_TEAM_ID', '9011954126')
 CLICKUP_BASE_URL = "https://api.clickup.com/api/v2"
@@ -99,7 +70,13 @@ FIELD_IDS = {
     'EXECUTED': '13d4d660-432d-4033-9805-2ffc7d793c92',
     'HUMAN_APPROVED_ACTION': 'a441971f-6fa4-41fd-91d9-e38b31266698',
     'HUMAN_APPROVED_VALUE': '6f6830f9-90f8-4614-a75d-0ab708c245b9',
-    'LIBRARY_LEVEL': 'e49ccff6-f042-4e47-b452-0812ba128cfb'
+    'LIBRARY_LEVEL': 'e49ccff6-f042-4e47-b452-0812ba128cfb',
+    # MCP Fields
+    'MCP_NAME': '5e2e416b-7ee8-4984-859b-c70c86c4d042',
+    'MCP_EXPECTED_ACTION': '56db1b14-75cb-42d9-bd38-45362d974516',
+    'MCP_TEST_TOOL': '9aa9b4c3-379a-44d4-a299-a697ee510287',
+    'MCP_TEST_TYPE': 'a8e7648a-19b9-425f-8f88-a65a0fc4c60b',
+    'MCP_TEST_RESULT': '1902f823-0326-43fb-bc75-4ceaa562c0cd'
 }
 
 PROCESS_LIBRARY_TYPE = 1018  # custom_item_id for Process Library tasks
@@ -130,7 +107,7 @@ class ClickUpService:
             params["include_subtasks"] = "true"
         
         url = f"{CLICKUP_BASE_URL}/task/{task_id}"
-        response = requests.get(url, headers=self.headers, params=params, timeout=10)
+        response = requests.get(url, headers=self.headers, params=params)
         
         if response.status_code != 200:
             logger.error(f"Failed to get task {task_id}: {response.text}")
@@ -143,7 +120,7 @@ class ClickUpService:
         url = f"{CLICKUP_BASE_URL}/task/{task_id}/field/{field_id}"
         data = {"value": value}
         
-        response = requests.post(url, headers=self.headers, json=data, timeout=10)
+        response = requests.post(url, headers=self.headers, json=data)
         
         if response.status_code != 200:
             logger.error(f"Failed to update field {field_id} on task {task_id}: {response.text}")
@@ -177,6 +154,18 @@ class ClickUpService:
         
         logger.info(f"Process Library root found: {last_process_library_task.get('id') if last_process_library_task else None}")
         return last_process_library_task
+    
+    def find_main_parent_task(self, start_task_id: str) -> Optional[Dict[str, Any]]:
+        """Find the ultimate parent task (the main business task)"""
+        current_task = self.get_task(start_task_id, custom_task_ids=True)
+        
+        # Traverse up to find the top-most parent
+        while current_task.get('parent'):
+            logger.info(f"Traversing up from {current_task['id']} to parent {current_task['parent']}")
+            current_task = self.get_task(current_task['parent'], custom_task_ids=True)
+        
+        logger.info(f"Main parent task found: {current_task['id']} - {current_task.get('name')}")
+        return current_task
     
     def fetch_subtasks_with_details(self, parent_task_id: str) -> List[Dict[str, Any]]:
         """Fetch all subtasks with their custom fields"""
@@ -215,6 +204,92 @@ class ClickUpService:
         
         sorted_subtasks = sorted(subtask_details, key=get_step_number)
         return sorted_subtasks
+    
+    def fetch_task_comments(self, task_id: str, start: int = 0, limit: int = 20) -> Dict[str, Any]:
+        """Fetch comments for a task with pagination"""
+        url = f"{CLICKUP_BASE_URL}/task/{task_id}/comment"
+        params = {
+            "start": start,
+            "limit": limit
+        }
+        
+        response = requests.get(url, headers=self.headers, params=params)
+        
+        if response.status_code != 200:
+            logger.error(f"Failed to get comments for task {task_id}: {response.text}")
+            response.raise_for_status()
+        
+        data = response.json()
+        comments = data.get('comments', [])
+        
+        # Normalize comments
+        normalized_comments = self.normalize_comments(comments)
+        
+        return {
+            "comments": normalized_comments,
+            "has_more": len(comments) >= limit
+        }
+    
+    def normalize_comments(self, raw_comments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Normalize comment data for consistent format"""
+        normalized = []
+        
+        for comment in raw_comments:
+            # Skip bot and system comments by default
+            username = comment.get('user', {}).get('username', '')
+            if 'bot' in username.lower() or comment.get('type') == 'system':
+                continue
+                
+            normalized.append({
+                'id': comment.get('id'),
+                'text': comment.get('comment_text', ''),
+                'user': {
+                    'id': comment.get('user', {}).get('id'),
+                    'username': comment.get('user', {}).get('username', 'Unknown'),
+                    'email': comment.get('user', {}).get('email', ''),
+                    'initials': comment.get('user', {}).get('initials', 
+                                          comment.get('user', {}).get('username', 'U')[0:2].upper()),
+                    'color': comment.get('user', {}).get('color', '#808080')
+                },
+                'date': comment.get('date'),
+                'date_formatted': self.format_relative_time(comment.get('date')),
+                'resolved': comment.get('resolved', False),
+                'assignee': comment.get('assignee'),
+                'reactions': comment.get('reactions', [])
+            })
+        
+        return normalized
+    
+    def format_relative_time(self, timestamp: str) -> str:
+        """Format timestamp as relative time (e.g., '2 hours ago')"""
+        if not timestamp:
+            return 'Unknown'
+        
+        try:
+            import time
+            from datetime import datetime
+            
+            # Convert timestamp to datetime
+            comment_time = datetime.fromtimestamp(int(timestamp) / 1000)
+            now = datetime.now()
+            
+            diff = now - comment_time
+            
+            if diff.days > 7:
+                return comment_time.strftime('%b %d, %Y')
+            elif diff.days > 0:
+                return f"{diff.days} day{'s' if diff.days > 1 else ''} ago"
+            elif diff.seconds > 3600:
+                hours = diff.seconds // 3600
+                return f"{hours} hour{'s' if hours > 1 else ''} ago"
+            elif diff.seconds > 60:
+                minutes = diff.seconds // 60
+                return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+            else:
+                return "Just now"
+        except Exception as e:
+            logger.error(f"Error formatting time: {e}")
+            return 'Unknown'
 
 
 # Initialize service
@@ -223,31 +298,21 @@ clickup_service = ClickUpService()
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint - minimal information"""
-    return 'OK', 200
+    """Health check endpoint"""
+    return jsonify({"status": "healthy", "service": "wait-node-backend"})
 
-
-@app.route('/api/auth/check', methods=['GET'])
-def auth_check():
-    """Check if user is authenticated for API access"""
-    if 'session_id' in session:
-        return jsonify({"authenticated": True}), 200
-    return jsonify({"authenticated": False}), 401
-
-
-# ============= PROTECTED API ROUTES =============
-# All routes below require authentication
 
 @app.route('/api/wait-node/initialize/<task_id>', methods=['GET'])
-@login_required
-@rate_limiter.rate_limit(limit='50 per minute')
 def initialize_wait_node(task_id):
     """
     Combined endpoint to fetch all necessary data for wait node interface
-    Returns root task, wait task, and all subtasks in a single response
+    Returns root task, wait task, main parent task, and all subtasks in a single response
     """
     try:
-        logger.info(f"Initializing wait node for task: {task_id} by user: {request.user.get('email')}")
+        logger.info(f"Initializing wait node for task: {task_id}")
+        
+        # Check if comments should be included
+        include_comments = request.args.get('include_comments', 'true').lower() == 'true'
         
         # Find process library root
         root_task = clickup_service.find_process_library_root(task_id)
@@ -257,26 +322,42 @@ def initialize_wait_node(task_id):
         # Get wait task details
         wait_task = clickup_service.get_task(task_id, custom_task_ids=True)
         
+        # Get main parent task (the ultimate business task)
+        main_task = clickup_service.find_main_parent_task(task_id)
+        
         # Get all subtasks
         subtasks = clickup_service.fetch_subtasks_with_details(root_task['id'])
+        
+        # Get initial comments for main task if requested
+        main_task_comments = None
+        if include_comments and main_task:
+            try:
+                main_task_comments = clickup_service.fetch_task_comments(
+                    main_task['id'], 
+                    start=0, 
+                    limit=10
+                )
+            except Exception as e:
+                logger.error(f"Failed to fetch comments for main task: {e}")
+                main_task_comments = {"comments": [], "has_more": False}
         
         return jsonify({
             "root_task": root_task,
             "wait_task": wait_task,
-            "subtasks": subtasks
+            "main_task": main_task,
+            "subtasks": subtasks,
+            "main_task_comments": main_task_comments
         })
     
     except requests.exceptions.HTTPError as e:
         logger.error(f"HTTP error in initialize_wait_node: {e}")
-        return jsonify({"error": "Failed to fetch task data"}), e.response.status_code if e.response else 500
+        return jsonify({"error": str(e)}), e.response.status_code if e.response else 500
     except Exception as e:
         logger.error(f"Error in initialize_wait_node: {e}")
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/wait-node/approve/<task_id>', methods=['POST'])
-@login_required
-@rate_limiter.rate_limit(limit='10 per minute')
 def approve_task(task_id):
     """
     Handle approval submission
@@ -284,16 +365,10 @@ def approve_task(task_id):
     """
     try:
         approval_data = request.json
-        logger.info(f"Processing approval for task {task_id} by user: {request.user.get('email')}")
+        logger.info(f"Processing approval for task {task_id} with data: {approval_data}")
         
         if not approval_data:
             return jsonify({"error": "No approval data provided"}), 400
-        
-        # Validate approval data
-        allowed_fields = set(FIELD_IDS.values())
-        for field_id in approval_data.keys():
-            if field_id not in allowed_fields:
-                return jsonify({"error": f"Invalid field ID: {field_id}"}), 400
         
         # Update fields in parallel
         results = []
@@ -330,9 +405,6 @@ def approve_task(task_id):
         time.sleep(1)  # Give ClickUp a moment to process
         verified_task = clickup_service.get_task(task_id, custom_task_ids=True)
         
-        # Log approval action for audit trail
-        logger.info(f"Approval completed for task {task_id} by {request.user.get('email')}")
-        
         return jsonify({
             "success": True,
             "task": verified_task,
@@ -341,12 +413,10 @@ def approve_task(task_id):
     
     except Exception as e:
         logger.error(f"Error in approve_task: {e}")
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/task/<task_id>', methods=['GET'])
-@login_required
-@rate_limiter.rate_limit(limit='100 per minute')
 def get_task(task_id):
     """Get task details"""
     try:
@@ -357,15 +427,13 @@ def get_task(task_id):
         return jsonify(task)
     
     except requests.exceptions.HTTPError as e:
-        return jsonify({"error": "Failed to fetch task"}), e.response.status_code if e.response else 500
+        return jsonify({"error": str(e)}), e.response.status_code if e.response else 500
     except Exception as e:
         logger.error(f"Error in get_task: {e}")
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/task/<task_id>/process-root', methods=['GET'])
-@login_required
-@rate_limiter.rate_limit(limit='50 per minute')
 def get_process_root(task_id):
     """Find process library root for a task"""
     try:
@@ -376,12 +444,10 @@ def get_process_root(task_id):
     
     except Exception as e:
         logger.error(f"Error in get_process_root: {e}")
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/task/<task_id>/subtasks-detailed', methods=['GET'])
-@login_required
-@rate_limiter.rate_limit(limit='50 per minute')
 def get_subtasks_detailed(task_id):
     """Get all subtasks with details"""
     try:
@@ -390,120 +456,55 @@ def get_subtasks_detailed(task_id):
     
     except Exception as e:
         logger.error(f"Error in get_subtasks_detailed: {e}")
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/task/<task_id>/field/<field_id>', methods=['PUT'])
-@login_required
-@rate_limiter.rate_limit(limit='20 per minute')
 def update_field(task_id, field_id):
     """Update a single custom field"""
     try:
-        # Validate field ID
-        if field_id not in FIELD_IDS.values():
-            return jsonify({"error": "Invalid field ID"}), 400
-        
         data = request.json
         if 'value' not in data:
             return jsonify({"error": "Value is required"}), 400
         
         result = clickup_service.update_custom_field(task_id, field_id, data['value'])
-        
-        # Log field update for audit
-        logger.info(f"Field {field_id} updated on task {task_id} by {request.user.get('email')}")
-        
         return jsonify(result)
     
     except requests.exceptions.HTTPError as e:
-        return jsonify({"error": "Failed to update field"}), e.response.status_code if e.response else 500
+        return jsonify({"error": str(e)}), e.response.status_code if e.response else 500
     except Exception as e:
         logger.error(f"Error in update_field: {e}")
-        return jsonify({"error": "Internal server error"}), 500
+        return jsonify({"error": str(e)}), 500
 
 
-# =====================================================
-# Secure Page Routes - Server-Side Rendering
-# =====================================================
-
-@app.route('/pages/wait-node-v2')
-@login_required
-@rate_limiter.rate_limit(limit='100 per hour')
-def serve_wait_node_v2():
-    """
-    Serve wait-node-v2 page only to authenticated users
-    This ensures the HTML is never sent without authentication
-    """
-    # Log page access for security audit
-    logger.info(f"Secure page access: wait-node-v2 by {request.user.get('email')}")
+@app.route('/api/task/<task_id>/comments', methods=['GET'])
+def get_task_comments(task_id):
+    """Get comments for a task with pagination"""
+    try:
+        start = int(request.args.get('start', 0))
+        limit = int(request.args.get('limit', 20))
+        
+        comments_data = clickup_service.fetch_task_comments(task_id, start, limit)
+        return jsonify(comments_data)
     
-    # Render the template - query parameters are automatically available in the template
-    return render_template('secured/wait-node-v2.html')
-
-
-@app.route('/pages/wait-node')
-@login_required
-@rate_limiter.rate_limit(limit='100 per hour')
-def serve_wait_node():
-    """
-    Serve wait-node page only to authenticated users
-    Legacy version - consider using wait-node-v2
-    """
-    # Log page access for security audit
-    logger.info(f"Secure page access: wait-node by {request.user.get('email')}")
-    
-    return render_template('secured/wait-node.html')
-
-
-@app.route('/pages/health')
-def pages_health():
-    """Health check for secure pages - no auth required"""
-    return jsonify({
-        'status': 'healthy',
-        'pages_available': True,
-        'pages': ['wait-node', 'wait-node-v2']
-    }), 200
-
-
-@app.errorhandler(404)
-def not_found(e):
-    """Handle 404 errors"""
-    return jsonify({"error": "Endpoint not found"}), 404
-
-
-@app.errorhandler(500)
-def internal_error(e):
-    """Handle 500 errors"""
-    logger.error(f"Internal server error: {e}")
-    return jsonify({"error": "Internal server error"}), 500
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"HTTP error in get_task_comments: {e}")
+        return jsonify({"error": str(e)}), e.response.status_code if e.response else 500
+    except Exception as e:
+        logger.error(f"Error in get_task_comments: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == '__main__':
     # Check for required environment variables
-    required_vars = [
-        'CLICKUP_API_KEY',
-        'GOOGLE_CLIENT_ID',
-        'GOOGLE_CLIENT_SECRET',
-        'SESSION_SECRET'
-    ]
-    
-    missing_vars = [var for var in required_vars if not os.getenv(var)]
-    if missing_vars:
-        print("ERROR: Missing required environment variables:")
-        for var in missing_vars:
-            print(f"  - {var}")
-        print("\nPlease set these in your .env file or Render environment")
+    if not CLICKUP_API_KEY:
+        print("ERROR: CLICKUP_API_KEY environment variable is required!")
+        print("Please create a .env file with your ClickUp API key")
         exit(1)
     
-    # Production check
-    if os.environ.get('FLASK_ENV') == 'production':
-        print("Running in PRODUCTION mode")
-        print("Use a production WSGI server like Gunicorn")
-        print("Example: gunicorn -w 4 -b 0.0.0.0:10000 app_secure:app")
-    else:
-        print(f"Starting secure Flask server...")
-        print(f"Team ID: {CLICKUP_TEAM_ID}")
-        print(f"Server running at: http://localhost:5678")
-        print(f"Health check: http://localhost:5678/health")
-        print(f"OAuth login: http://localhost:5678/auth/login")
-        
-        app.run(host='0.0.0.0', port=5678, debug=False)  # Never use debug=True in production
+    print(f"Starting Flask server...")
+    print(f"Team ID: {CLICKUP_TEAM_ID}")
+    print(f"Server running at: http://localhost:5678")
+    print(f"Health check: http://localhost:5678/health")
+    
+    app.run(host='0.0.0.0', port=5678, debug=True)
