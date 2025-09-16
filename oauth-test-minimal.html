@@ -91,6 +91,11 @@
             log('🚀 Testing login redirect...', 'info');
             
             try {
+                // Store current URL for redirect back after OAuth
+                const currentUrl = window.location.href.split('?')[0]; // Remove any existing params
+                sessionStorage.setItem('redirect_after_login', currentUrl);
+                log(`📝 Stored redirect URL: ${currentUrl}`, 'info');
+                
                 log(`📡 Direct redirect to: ${BACKEND_URL}/auth/login`, 'info');
                 log('🔄 Redirecting now...', 'info');
                 

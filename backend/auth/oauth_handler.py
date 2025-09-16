@@ -266,6 +266,12 @@ def login():
     """
     Initiate OAuth login flow with CSRF protection
     """
+    # Store the referring page for post-OAuth redirect
+    referrer = request.headers.get('Referer')
+    if referrer and referrer.startswith(current_app.config['FRONTEND_URL']):
+        session['next_url'] = referrer
+        logger.info(f"Storing referrer for post-OAuth redirect: {referrer}")
+    
     # Generate CSRF state token
     state = generate_csrf_token()
     session['oauth_state'] = state
