@@ -163,7 +163,10 @@
         HUMAN_APPROVED_VALUE: '6f6830f9-90f8-4614-a75d-0ab708c245b9',
         HUMAN_WAIT_OVERRIDE_INPUT: '7572d842-235f-4bb1-8fb0-8ad47ad1ec5a',
         WAIT_STATUS_EXECUTING: '833db1b3-8557-4a09-b5ed-5183f90e439b',
-        LIBRARY_LEVEL: 'e49ccff6-f042-4e47-b452-0812ba128cfb'
+        LIBRARY_LEVEL: 'e49ccff6-f042-4e47-b452-0812ba128cfb',
+        // MCP Fields
+        MCP_NAME: '5e2e416b-7ee8-4984-859b-c70c86c4d042',
+        MCP_EXPECTED_ACTION: '56db1b14-75cb-42d9-bd38-45362d974516'
     };
 
     // Helper function to extract URL parameters
@@ -916,6 +919,276 @@
         );
     }
 
+    // Step Details Panel Component (Right Panel)
+    function StepDetailsPanel({ subtasks, selectedStepId, onStepSelect }) {
+        const [selectedStep, setSelectedStep] = useState(null);
+        const [stepComments, setStepComments] = useState([]);
+        const [loadingComments, setLoadingComments] = useState(false);
+        const [hasMoreComments, setHasMoreComments] = useState(false);
+        const [sectionsExpanded, setSectionsExpanded] = useState({
+            description: false,    // Collapsed by default
+            processText: true,     // Expanded by default  
+            mcpInfo: true,         // Expanded by default
+            comments: true         // Expanded by default
+        });
+
+        // Update selected step when selection changes
+        useEffect(() => {
+            if (selectedStepId && subtasks) {
+                const step = subtasks.find(s => s.id === selectedStepId);
+                setSelectedStep(step);
+                if (step) {
+                    loadStepComments(step.id);
+                }
+            }
+        }, [selectedStepId, subtasks]);
+
+        const loadStepComments = async (stepId) => {
+            setLoadingComments(true);
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/task/${stepId}/comments?limit=5`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setStepComments(data.comments || []);
+                    setHasMoreComments(data.has_more || false);
+                }
+            } catch (error) {
+                console.error('Error loading step comments:', error);
+                setStepComments([]);
+            } finally {
+                setLoadingComments(false);
+            }
+        };
+
+        const loadMoreStepComments = async () => {
+            if (!selectedStep || loadingComments) return;
+            
+            setLoadingComments(true);
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/task/${selectedStep.id}/comments?start=${stepComments.length}&limit=5`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setStepComments(prev => [...prev, ...(data.comments || [])]);
+                    setHasMoreComments(data.has_more || false);
+                }
+            } catch (error) {
+                console.error('Error loading more step comments:', error);
+            } finally {
+                setLoadingComments(false);
+            }
+        };
+
+        const toggleSection = (section) => {
+            setSectionsExpanded(prev => ({
+                ...prev,
+                [section]: !prev[section]
+            }));
+        };
+
+        const handleStepChange = (e) => {
+            const stepId = e.target.value;
+            if (stepId && onStepSelect) {
+                onStepSelect(stepId);
+            }
+        };
+
+        if (!subtasks || subtasks.length === 0) {
+            return (
+                <div className="w-96 bg-white shadow-xl h-full overflow-y-auto border-l border-gray-200">
+                    <div className="p-6 text-center text-gray-500">
+                        <p>No steps available</p>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="w-96 bg-white shadow-xl h-full overflow-y-auto border-l border-gray-200">
+                {/* Header */}
+                <div className="bg-gradient-to-r from-purple-600 to-purple-800 text-white p-4">
+                    <h3 className="text-lg font-semibold mb-3">📋 Step Details</h3>
+                    
+                    {/* Step Selector Dropdown */}
+                    <select 
+                        value={selectedStep?.id || ''}
+                        onChange={handleStepChange}
+                        className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-white/50"
+                    >
+                        <option value="" className="text-gray-800">Select a step...</option>
+                        {subtasks.map((step) => {
+                            const stepNumber = getCustomField(step, FIELD_IDS.STEP_NUMBER) || '?';
+                            return (
+                                <option key={step.id} value={step.id} className="text-gray-800">
+                                    Step {stepNumber}: {step.name}
+                                </option>
+                            );
+                        })}
+                    </select>
+                </div>
+
+                {selectedStep ? (
+                    <div className="p-4 space-y-4">
+                        {/* Step Info */}
+                        <div className="bg-gray-50 rounded-lg p-3">
+                            <div className="font-semibold text-gray-900">
+                                Step {getCustomField(selectedStep, FIELD_IDS.STEP_NUMBER) || '?'} - {selectedStep.name}
+                            </div>
+                        </div>
+
+                        {/* Task Description Section */}
+                        {selectedStep.description && (
+                            <div className="border rounded-lg overflow-hidden">
+                                <div 
+                                    className="bg-gray-50 px-4 py-2 cursor-pointer hover:bg-gray-100 transition-colors flex items-center justify-between"
+                                    onClick={() => toggleSection('description')}
+                                >
+                                    <span className="font-medium text-gray-700">📝 Task Description</span>
+                                    <span className="text-gray-400">
+                                        {sectionsExpanded.description ? '▼' : '▶'}
+                                    </span>
+                                </div>
+                                {sectionsExpanded.description && (
+                                    <div className="p-4 prose prose-sm max-w-none">
+                                        <div dangerouslySetInnerHTML={{
+                                            __html: DOMPurify.sanitize(marked.parse(selectedStep.description))
+                                        }} />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Process Text Section */}
+                        {getCustomField(selectedStep, FIELD_IDS.PROCESS_TEXT) && (
+                            <div className="border rounded-lg overflow-hidden">
+                                <div 
+                                    className="bg-gray-50 px-4 py-2 cursor-pointer hover:bg-gray-100 transition-colors flex items-center justify-between"
+                                    onClick={() => toggleSection('processText')}
+                                >
+                                    <span className="font-medium text-gray-700">🔧 Process Text</span>
+                                    <span className="text-gray-400">
+                                        {sectionsExpanded.processText ? '▼' : '▶'}
+                                    </span>
+                                </div>
+                                {sectionsExpanded.processText && (
+                                    <div className="p-4 prose prose-sm max-w-none">
+                                        <div dangerouslySetInnerHTML={{
+                                            __html: DOMPurify.sanitize(marked.parse(getCustomField(selectedStep, FIELD_IDS.PROCESS_TEXT)))
+                                        }} />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* MCP Information Section */}
+                        {(getCustomField(selectedStep, FIELD_IDS.MCP_NAME) || getCustomField(selectedStep, FIELD_IDS.MCP_EXPECTED_ACTION)) && (
+                            <div className="border rounded-lg overflow-hidden">
+                                <div 
+                                    className="bg-gray-50 px-4 py-2 cursor-pointer hover:bg-gray-100 transition-colors flex items-center justify-between"
+                                    onClick={() => toggleSection('mcpInfo')}
+                                >
+                                    <span className="font-medium text-gray-700">🤖 MCP Information</span>
+                                    <span className="text-gray-400">
+                                        {sectionsExpanded.mcpInfo ? '▼' : '▶'}
+                                    </span>
+                                </div>
+                                {sectionsExpanded.mcpInfo && (
+                                    <div className="p-4 space-y-2">
+                                        <div>
+                                            <span className="font-semibold text-gray-700">Client/Tool:</span>{' '}
+                                            <span className="text-gray-900">
+                                                {getCustomField(selectedStep, FIELD_IDS.MCP_NAME) || 'Not specified'}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className="font-semibold text-gray-700">Action:</span>{' '}
+                                            <span className="text-gray-900">
+                                                {getCustomField(selectedStep, FIELD_IDS.MCP_EXPECTED_ACTION) || 'Not specified'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Step Comments Section */}
+                        <div className="border rounded-lg overflow-hidden">
+                            <div 
+                                className="bg-gray-50 px-4 py-2 cursor-pointer hover:bg-gray-100 transition-colors flex items-center justify-between"
+                                onClick={() => toggleSection('comments')}
+                            >
+                                <span className="font-medium text-gray-700">
+                                    💬 Step Comments
+                                    {stepComments.length > 0 && (
+                                        <span className="ml-2 bg-gray-600 text-white text-xs px-2 py-0.5 rounded-full">
+                                            {stepComments.length}
+                                        </span>
+                                    )}
+                                </span>
+                                <span className="text-gray-400">
+                                    {sectionsExpanded.comments ? '▼' : '▶'}
+                                </span>
+                            </div>
+                            {sectionsExpanded.comments && (
+                                <div className="p-4">
+                                    {loadingComments && stepComments.length === 0 ? (
+                                        <p className="text-gray-500 text-sm">Loading comments...</p>
+                                    ) : stepComments.length === 0 ? (
+                                        <p className="text-gray-500 text-sm">No comments for this step</p>
+                                    ) : (
+                                        <>
+                                            <div className="space-y-3">
+                                                {stepComments.map((comment) => (
+                                                    <div key={comment.id} className="border-b pb-3 last:border-b-0">
+                                                        <div className="flex items-start gap-2">
+                                                            <div 
+                                                                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0"
+                                                                style={{ backgroundColor: comment.user?.color || '#808080' }}
+                                                            >
+                                                                {comment.user?.initials || '??'}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                                    <span className="font-medium text-gray-700">
+                                                                        {comment.user?.username || 'Unknown'}
+                                                                    </span>
+                                                                    <span>•</span>
+                                                                    <span>{comment.date_formatted}</span>
+                                                                </div>
+                                                                <div className="mt-1 text-sm text-gray-900 break-words">
+                                                                    {comment.text}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {hasMoreComments && (
+                                                <div className="text-center pt-3">
+                                                    <button 
+                                                        onClick={loadMoreStepComments}
+                                                        disabled={loadingComments}
+                                                        className="text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                                                    >
+                                                        {loadingComments ? 'Loading...' : 'Load More Comments'}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="p-6 text-center text-gray-500">
+                        <p>Select a step to view details</p>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     // Left Panel Component for Main Task
     function MainTaskPanel({ mainTask }) {
         if (!mainTask) return null;
@@ -1145,6 +1418,7 @@
         const [mainTask, setMainTask] = useState(null);
         const [subtasks, setSubtasks] = useState([]);
         const [expandedContext, setExpandedContext] = useState(false);
+        const [selectedStepId, setSelectedStepId] = useState(null);
 
         useEffect(() => {
             initializeApp();
@@ -1419,6 +1693,13 @@
                             </div>
                         </div>
                     </div>
+
+                    {/* Right Panel - Step Details */}
+                    <StepDetailsPanel 
+                        subtasks={subtasks}
+                        selectedStepId={selectedStepId}
+                        onStepSelect={setSelectedStepId}
+                    />
                 </div>
             </div>
         );
