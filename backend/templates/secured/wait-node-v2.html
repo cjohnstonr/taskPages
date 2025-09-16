@@ -6,20 +6,44 @@
     <title>Process Library Viewer</title>
 
     <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com">
+{% raw %}
+
+{% endraw %}
+</script>
 
     <!-- React & ReactDOM -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js">
+{% raw %}
+
+{% endraw %}
+</script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">
+{% raw %}
+
+{% endraw %}
+</script>
 
     <!-- Marked.js for Markdown -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js">
+{% raw %}
+
+{% endraw %}
+</script>
 
     <!-- DOMPurify for sanitization -->
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js">
+{% raw %}
+
+{% endraw %}
+</script>
 
     <!-- Babel for JSX -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js">
+{% raw %}
+
+{% endraw %}
+</script>
 
     <style>
       /* Accordion animations */
@@ -139,6 +163,8 @@
 <div id="root"></div>
 
 <script type="text/babel">
+{% raw %}
+
     const { useState, useEffect, useMemo } = React;
 
     // Configuration - Using Python backend
@@ -1806,6 +1832,8 @@
 
     // Render the app
     ReactDOM.render(<WaitApprovalApp />, document.getElementById('root'));
+
+{% endraw %}
 </script>
 </body>
 </html>
