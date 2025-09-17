@@ -836,32 +836,53 @@
         }, [mainTask]);
 
         const loadInitialComments = async () => {
-            if (!mainTask || !mainTask.id) return;
+            console.log('🔍 [MAIN COMMENTS] loadInitialComments called');
+            console.log('🔍 [MAIN COMMENTS] mainTask:', mainTask);
+            console.log('🔍 [MAIN COMMENTS] mainTask.id:', mainTask?.id);
+            
+            if (!mainTask || !mainTask.id) {
+                console.warn('⚠️ [MAIN COMMENTS] No main task or ID available');
+                return;
+            }
+            
+            const commentsUrl = `${BACKEND_URL}/api/task/${mainTask.id}/comments?limit=5`;
+            console.log('🔍 [MAIN COMMENTS] API URL:', commentsUrl);
             
             setLoading(true);
             try {
                 // Use session cookie authentication, not localStorage token
-                const response = await fetch(`${BACKEND_URL}/api/task/${mainTask.id}/comments?limit=5`, {
+                const response = await fetch(commentsUrl, {
                     credentials: 'include',  // Include session cookie
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     }
                 });
+                
+                console.log('🔍 [MAIN COMMENTS] Response status:', response.status);
+                console.log('🔍 [MAIN COMMENTS] Response ok:', response.ok);
+                
                 if (response.status === 401) {
+                    console.warn('⚠️ [MAIN COMMENTS] 401 Unauthorized, redirecting to login');
                     // Not authenticated, redirect to login
                     window.location.href = '/auth/login';
                     return;
                 }
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('🔍 [MAIN COMMENTS] Response data:', data);
+                    console.log('🔍 [MAIN COMMENTS] Comments array:', data.comments);
+                    console.log('🔍 [MAIN COMMENTS] Comments count:', data.comments?.length || 0);
+                    console.log('🔍 [MAIN COMMENTS] Has more:', data.has_more);
                     setComments(data.comments || []);
                     setHasMore(data.has_more || false);
                 } else {
-                    console.error('Failed to fetch comments:', response.statusText);
+                    const errorText = await response.text();
+                    console.error('❌ [MAIN COMMENTS] Failed to fetch comments:', response.status, response.statusText);
+                    console.error('❌ [MAIN COMMENTS] Error response body:', errorText);
                 }
             } catch (error) {
-                console.error('Error fetching comments:', error);
+                console.error('❌ [MAIN COMMENTS] Error fetching comments:', error);
             } finally {
                 setLoading(false);
             }
@@ -939,6 +960,14 @@
 
                 {expanded && (
                     <div className="px-4 pb-4">
+                        {(() => {
+                            console.log('🔍 [MAIN COMMENTS RENDER] Rendering comments section');
+                            console.log('🔍 [MAIN COMMENTS RENDER] loading:', loading);
+                            console.log('🔍 [MAIN COMMENTS RENDER] comments:', comments);
+                            console.log('🔍 [MAIN COMMENTS RENDER] comments.length:', comments.length);
+                            console.log('🔍 [MAIN COMMENTS RENDER] expanded:', expanded);
+                            return null;
+                        })()}
                         {loading && comments.length === 0 ? (
                             <div className="text-center py-4 text-gray-500 text-sm">
                                 Loading comments...
@@ -1031,28 +1060,46 @@
         }, [selectedStepId, subtasks]);
 
         const loadStepComments = async (stepId) => {
+            console.log('🔍 [STEP COMMENTS] loadStepComments called for stepId:', stepId);
+            
             setLoadingComments(true);
             try {
+                const commentsUrl = `${BACKEND_URL}/api/task/${stepId}/comments?limit=5`;
+                console.log('🔍 [STEP COMMENTS] API URL:', commentsUrl);
+                
                 // Use session cookie authentication, not localStorage token
-                const response = await fetch(`${BACKEND_URL}/api/task/${stepId}/comments?limit=5`, {
+                const response = await fetch(commentsUrl, {
                     credentials: 'include',  // Include session cookie
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     }
                 });
+                
+                console.log('🔍 [STEP COMMENTS] Response status:', response.status);
+                console.log('🔍 [STEP COMMENTS] Response ok:', response.ok);
+                
                 if (response.status === 401) {
+                    console.warn('⚠️ [STEP COMMENTS] 401 Unauthorized, redirecting to login');
                     // Not authenticated, redirect to login
                     window.location.href = '/auth/login';
                     return;
                 }
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('🔍 [STEP COMMENTS] Response data:', data);
+                    console.log('🔍 [STEP COMMENTS] Comments array:', data.comments);
+                    console.log('🔍 [STEP COMMENTS] Comments count:', data.comments?.length || 0);
+                    console.log('🔍 [STEP COMMENTS] Has more:', data.has_more);
                     setStepComments(data.comments || []);
                     setHasMoreComments(data.has_more || false);
+                } else {
+                    const errorText = await response.text();
+                    console.error('❌ [STEP COMMENTS] Failed to fetch comments:', response.status, response.statusText);
+                    console.error('❌ [STEP COMMENTS] Error response body:', errorText);
                 }
             } catch (error) {
-                console.error('Error loading step comments:', error);
+                console.error('❌ [STEP COMMENTS] Error loading step comments:', error);
                 setStepComments([]);
             } finally {
                 setLoadingComments(false);
@@ -1245,6 +1292,15 @@
                             </div>
                             {sectionsExpanded.comments && (
                                 <div className="p-4">
+                                    {(() => {
+                                        console.log('🔍 [STEP COMMENTS RENDER] Rendering step comments section');
+                                        console.log('🔍 [STEP COMMENTS RENDER] loadingComments:', loadingComments);
+                                        console.log('🔍 [STEP COMMENTS RENDER] stepComments:', stepComments);
+                                        console.log('🔍 [STEP COMMENTS RENDER] stepComments.length:', stepComments.length);
+                                        console.log('🔍 [STEP COMMENTS RENDER] selectedStep:', selectedStep);
+                                        console.log('🔍 [STEP COMMENTS RENDER] sectionsExpanded.comments:', sectionsExpanded.comments);
+                                        return null;
+                                    })()}
                                     {loadingComments && stepComments.length === 0 ? (
                                         <p className="text-gray-500 text-sm">Loading comments...</p>
                                     ) : stepComments.length === 0 ? (
