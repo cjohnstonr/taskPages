@@ -138,6 +138,45 @@ class ClickUpService:
         
         return response.json()
     
+    def get_task_comments(self, task_id: str, start: int = 0, limit: int = 10) -> Dict[str, Any]:
+        """Fetch comments for a ClickUp task"""
+        url = f"{CLICKUP_BASE_URL}/task/{task_id}/comment"
+        params = {
+            "team_id": CLICKUP_TEAM_ID,
+            "start": start,
+            "limit": min(limit, 100)  # ClickUp max is 100
+        }
+        
+        response = requests.get(url, headers=self.headers, params=params, timeout=10)
+        
+        if response.status_code != 200:
+            logger.error(f"Failed to get comments for task {task_id}: {response.text}")
+            response.raise_for_status()
+        
+        data = response.json()
+        
+        # Process and normalize the comment data
+        comments = []
+        for comment in data.get('comments', []):
+            comments.append({
+                'id': comment.get('id'),
+                'text': comment.get('comment_text', ''),
+                'date': comment.get('date'),
+                'user': {
+                    'id': comment.get('user', {}).get('id'),
+                    'username': comment.get('user', {}).get('username', 'Unknown'),
+                    'email': comment.get('user', {}).get('email', ''),
+                    'initials': comment.get('user', {}).get('initials', '??'),
+                    'color': comment.get('user', {}).get('color', '#808080')
+                }
+            })
+        
+        return {
+            'comments': comments,
+            'has_more': len(comments) == limit,  # If we got a full page, there might be more
+            'total': len(comments)  # ClickUp doesn't always provide total count
+        }
+    
     def update_custom_field(self, task_id: str, field_id: str, value: Any) -> Dict[str, Any]:
         """Update a custom field on a task"""
         url = f"{CLICKUP_BASE_URL}/task/{task_id}/field/{field_id}"
@@ -398,22 +437,26 @@ def get_subtasks_detailed(task_id):
 @login_required
 @rate_limiter.rate_limit(limit='100 per minute')
 def get_task_comments(task_id):
-    """Get comments for a task"""
+    """Get comments for a task from ClickUp"""
     try:
         # Get pagination parameters
         start = request.args.get('start', 0, type=int)
         limit = request.args.get('limit', 10, type=int)
         
-        # For now, return empty comments since ClickUp integration is not implemented
-        # TODO: Implement actual ClickUp comments fetching
-        return jsonify({
-            "comments": [],
-            "has_more": False,
-            "total": 0
-        })
+        logger.info(f"Fetching comments for task {task_id} (start={start}, limit={limit})")
+        
+        # Fetch comments from ClickUp API
+        comments_data = clickup_service.get_task_comments(task_id, start=start, limit=limit)
+        
+        logger.info(f"Retrieved {len(comments_data['comments'])} comments for task {task_id}")
+        
+        return jsonify(comments_data)
     
+    except requests.exceptions.RequestException as e:
+        logger.error(f"ClickUp API error in get_task_comments for task {task_id}: {e}")
+        return jsonify({"error": "Failed to fetch comments from ClickUp"}), 502
     except Exception as e:
-        logger.error(f"Error in get_task_comments: {e}")
+        logger.error(f"Error in get_task_comments for task {task_id}: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
 
