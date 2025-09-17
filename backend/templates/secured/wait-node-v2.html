@@ -223,48 +223,60 @@
             return localStorage.getItem('auth_token');
         }
 
-        checkAuthentication() {
-            const token = this.getAuthToken();
-            if (!token) {
-                console.log('No auth token found, redirecting to login...');
-                window.location.href = '/index.html';
-                return false;
+        async checkAuthentication() {
+            // For backend-served pages, we're on same origin as the API
+            // Session cookie will automatically be included
+            try {
+                const res = await fetch('/auth/status', {
+                    credentials: 'include',  // Include session cookie
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (res.status === 401) {
+                    console.log('Not authenticated, redirecting to login...');
+                    window.location.href = '/auth/login';
+                    return false;
+                }
+                
+                const data = await res.json();
+                if (data.authenticated) {
+                    console.log('Authenticated via session cookie');
+                    return true;
+                }
+            } catch (error) {
+                console.error('Auth check failed:', error);
             }
-            return true;
+            
+            // Not authenticated, redirect to login
+            window.location.href = '/auth/login';
+            return false;
         }
 
         async request(endpoint, options = {}) {
-            // Check authentication before making any API request
-            const authToken = this.getAuthToken();
-            if (!authToken) {
-                console.error('No authentication token found');
-                window.location.href = '/index.html';
-                throw new Error('Authentication required');
-            }
-
             try {
                 const response = await fetch(`${this.baseUrl}${endpoint}`, {
                     ...options,
+                    credentials: 'include',  // Always include cookies for same-origin
                     headers: {
-                        'Authorization': `Bearer ${authToken}`,
                         'Content-Type': 'application/json',
                         ...options.headers
                     }
                 });
-
+                
                 // Handle authentication errors
                 if (response.status === 401) {
                     console.error('Authentication failed, redirecting to login...');
-                    localStorage.removeItem('auth_token');
-                    window.location.href = '/index.html';
+                    window.location.href = '/auth/login';
                     throw new Error('Authentication failed');
                 }
-
+                
                 if (!response.ok) {
                     const errorData = await response.json();
                     throw new Error(`API error: ${response.status} - ${JSON.stringify(errorData)}`);
                 }
-
+                
                 return await response.json();
             } catch (error) {
                 console.error('Backend API request failed:', error);

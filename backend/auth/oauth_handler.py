@@ -247,6 +247,17 @@ def login_required(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # Try Bearer token first for API requests (cross-domain)
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            token = auth_header[7:]
+            # Try both validation methods
+            user_session = validate_api_token(token) or validate_auth_token(token)
+            if user_session:
+                request.user = user_session
+                return f(*args, **kwargs)
+        
+        # Fallback to cookie session (same-origin pages)
         user_session = get_user_session()
         if not user_session:
             if request.is_json:

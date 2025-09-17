@@ -116,6 +116,7 @@
             try {
                 const response = await fetch(`${BACKEND_URL}/auth/exchange-token`, {
                     method: 'POST',
+                    credentials: 'include',  // Send cookies cross-domain for token exchange
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
