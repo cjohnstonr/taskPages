@@ -330,21 +330,19 @@
 
         if (!subtasks || subtasks.length === 0) {
             return (
-                <div className="bg-white mx-6 mb-6 p-6 rounded-xl shadow-lg">
-                    <h3 className="text-xl font-medium text-gray-800 mb-5 flex items-center gap-3">
-                        <span className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white shadow-md">📝</span>
-                        Process Steps
+                <div className="bg-white border-b border-gray-200 p-6">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-5">
+                        📝 Process Steps
                     </h3>
-                    <p style={{color: 'rgb(156 163 175)', fontStyle: 'italic', fontWeight: '300'}}>No process steps found</p>
+                    <p className="text-gray-400 italic font-light">No process steps found</p>
                 </div>
             );
         }
 
         return (
-            <div className="bg-white mx-6 mb-6 p-6 rounded-xl shadow-lg">
-                <h3 className="text-xl font-medium text-gray-800 mb-5 flex items-center gap-3">
-                    <span className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white shadow-md">📝</span>
-                    Process Steps
+            <div className="bg-white border-b border-gray-200 p-6">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-5 flex items-center gap-3">
+                    📝 Process Steps
                     <span className="ml-auto text-sm font-normal text-gray-500">{subtasks.length} total steps</span>
                 </h3>
 
@@ -537,11 +535,11 @@
         if (normalizedStatus === '39c26799-0fcb-446c-9045-a8ee22a4a095' || // Completed
             normalizedStatus === '833db1b3-8557-4a09-b5ed-5183f90e439b') { // Executing
             return (
-                <div className="p-5 bg-green-50 border-b border-green-200">
+                <div className="p-6 bg-green-50 border-b border-green-200">
                     <div className="flex items-center space-x-3">
                         <span className="text-green-600 text-2xl">✅</span>
                         <div>
-                            <h3 className="text-lg font-semibold text-green-900">Already Processed</h3>
+                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Already Processed</h3>
                             <p className="text-green-700">This approval has already been submitted.</p>
                         </div>
                     </div>
@@ -562,11 +560,11 @@
                                             'Unknown';
 
             return (
-                <div className="p-5 bg-yellow-50 border-b border-yellow-200">
+                <div className="p-6 bg-yellow-50 border-b border-yellow-200">
                     <div className="flex items-center space-x-3">
                         <span className="text-yellow-600 text-2xl">⏳</span>
                         <div>
-                            <h3 className="text-lg font-semibold text-yellow-900">Not Ready for Approval</h3>
+                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Not Ready for Approval</h3>
                             <p className="text-yellow-700">
                                 This task is not currently awaiting human approval.
                                 Current status: <strong>{statusLabel}</strong>
@@ -761,11 +759,11 @@
 
         if (formData.submitted) {
             return (
-                <div className="p-5 bg-green-50 border-b border-green-200">
+                <div className="p-6 bg-green-50 border-b border-green-200">
                     <div className="flex items-center space-x-3">
                         <span className="text-green-600 text-3xl">✅</span>
                         <div>
-                            <h3 className="text-lg font-semibold text-green-900">Successfully Submitted</h3>
+                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Successfully Submitted</h3>
                             <p className="text-green-700">Your approval has been recorded and the process will continue.</p>
                         </div>
                     </div>
@@ -774,22 +772,22 @@
         }
 
         return (
-            <div className="border-t-4 border-blue-600">
+            <div className="bg-white border-b border-gray-200">
                 {/* AI Proposal Section */}
-                <div className="p-5 bg-blue-50 border-b border-blue-200">
-                    <h3 className="text-lg font-semibold text-blue-900 mb-4">🤖 AI Recommendation</h3>
+                <div className="p-6 bg-gray-50 border-b border-gray-200">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">🤖 AI Recommendation</h3>
                     <div className="space-y-3">
                         <div>
-                            <span className="text-sm font-medium text-blue-700">Proposed Action:</span>
-                            <div className="mt-1 p-3 bg-white rounded-lg border border-blue-200">
-                                <code className="text-sm text-blue-900">{aiProposedAction}</code>
+                            <span className="text-sm font-medium text-gray-600">Proposed Action:</span>
+                            <div className="mt-1 p-3 bg-white rounded-lg border border-gray-200">
+                                <code className="text-sm text-gray-900">{aiProposedAction}</code>
                             </div>
                         </div>
                         {aiProposedValue && (
                             <div>
-                                <span className="text-sm font-medium text-blue-700">Proposed Value:</span>
-                                <div className="mt-1 p-3 bg-white rounded-lg border border-blue-200">
-                                    <pre className="text-sm text-blue-900 whitespace-pre-wrap">{aiProposedValue}</pre>
+                                <span className="text-sm font-medium text-gray-600">Proposed Value:</span>
+                                <div className="mt-1 p-3 bg-white rounded-lg border border-gray-200">
+                                    <pre className="text-sm text-gray-900 whitespace-pre-wrap">{aiProposedValue}</pre>
                                 </div>
                             </div>
                         )}
@@ -797,8 +795,8 @@
                 </div>
 
                 {/* Human Approval Section */}
-                <div className="p-5 bg-white border-b border-gray-200">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">✍️ Your Decision</h3>
+                <div className="p-6 bg-white border-b border-gray-200">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">✍️ Your Decision</h3>
 
                     {renderFormInterface()}
 
@@ -1107,7 +1105,10 @@
 
         if (!subtasks || subtasks.length === 0) {
             return (
-                <div className="w-96 bg-white shadow-xl h-full overflow-y-auto border-l border-gray-200">
+                <div className="w-96 bg-gray-50 shadow-xl h-full overflow-y-auto border-l border-gray-200">
+                    <div className="bg-white border-b border-gray-200 p-4">
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">📋 Step Details</h3>
+                    </div>
                     <div className="p-6 text-center text-gray-500">
                         <p>No steps available</p>
                     </div>
@@ -1116,16 +1117,16 @@
         }
 
         return (
-            <div className="w-96 bg-white shadow-xl h-full overflow-y-auto border-l border-gray-200">
+            <div className="w-96 bg-gray-50 shadow-xl h-full overflow-y-auto border-l border-gray-200">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-purple-600 to-purple-800 text-white p-4">
-                    <h3 className="text-lg font-semibold mb-3">📋 Step Details</h3>
+                <div className="bg-white border-b border-gray-200 p-4">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">📋 Step Details</h3>
                     
                     {/* Step Selector Dropdown */}
                     <select 
                         value={selectedStep?.id || ''}
                         onChange={handleStepChange}
-                        className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-white/50"
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                         <option value="" className="text-gray-800">Select a step...</option>
                         {subtasks.map((step) => {
@@ -1142,7 +1143,8 @@
                 {selectedStep ? (
                     <div className="p-4 space-y-4">
                         {/* Step Info */}
-                        <div className="bg-gray-50 rounded-lg p-3">
+                        <div className="bg-white border-b border-gray-200 p-4">
+                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Current Step</h4>
                             <div className="font-semibold text-gray-900">
                                 Step {getCustomField(selectedStep, FIELD_IDS.STEP_NUMBER) || '?'} - {selectedStep.name}
                             </div>
@@ -1150,12 +1152,12 @@
 
                         {/* Task Description Section */}
                         {selectedStep.description && (
-                            <div className="border rounded-lg overflow-hidden">
+                            <div className="bg-white border-b border-gray-200">
                                 <div 
-                                    className="bg-gray-50 px-4 py-2 cursor-pointer hover:bg-gray-100 transition-colors flex items-center justify-between"
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
                                     onClick={() => toggleSection('description')}
                                 >
-                                    <span className="font-medium text-gray-700">📝 Task Description</span>
+                                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">📝 Task Description</span>
                                     <span className="text-gray-400">
                                         {sectionsExpanded.description ? '▼' : '▶'}
                                     </span>
@@ -1172,12 +1174,12 @@
 
                         {/* Process Text Section */}
                         {getCustomField(selectedStep, FIELD_IDS.PROCESS_TEXT) && (
-                            <div className="border rounded-lg overflow-hidden">
+                            <div className="bg-white border-b border-gray-200">
                                 <div 
-                                    className="bg-gray-50 px-4 py-2 cursor-pointer hover:bg-gray-100 transition-colors flex items-center justify-between"
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
                                     onClick={() => toggleSection('processText')}
                                 >
-                                    <span className="font-medium text-gray-700">🔧 Process Text</span>
+                                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">🔧 Process Text</span>
                                     <span className="text-gray-400">
                                         {sectionsExpanded.processText ? '▼' : '▶'}
                                     </span>
@@ -1194,12 +1196,12 @@
 
                         {/* MCP Information Section */}
                         {(getCustomField(selectedStep, FIELD_IDS.MCP_NAME) || getCustomField(selectedStep, FIELD_IDS.MCP_EXPECTED_ACTION)) && (
-                            <div className="border rounded-lg overflow-hidden">
+                            <div className="bg-white border-b border-gray-200">
                                 <div 
-                                    className="bg-gray-50 px-4 py-2 cursor-pointer hover:bg-gray-100 transition-colors flex items-center justify-between"
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
                                     onClick={() => toggleSection('mcpInfo')}
                                 >
-                                    <span className="font-medium text-gray-700">🤖 MCP Information</span>
+                                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">🤖 MCP Information</span>
                                     <span className="text-gray-400">
                                         {sectionsExpanded.mcpInfo ? '▼' : '▶'}
                                     </span>
@@ -1207,14 +1209,14 @@
                                 {sectionsExpanded.mcpInfo && (
                                     <div className="p-4 space-y-2">
                                         <div>
-                                            <span className="font-semibold text-gray-700">Client/Tool:</span>{' '}
-                                            <span className="text-gray-900">
+                                            <span className="text-sm font-medium text-gray-500">Client/Tool:</span>{' '}
+                                            <span className="text-sm text-gray-900">
                                                 {getCustomField(selectedStep, FIELD_IDS.MCP_NAME) || 'Not specified'}
                                             </span>
                                         </div>
                                         <div>
-                                            <span className="font-semibold text-gray-700">Action:</span>{' '}
-                                            <span className="text-gray-900">
+                                            <span className="text-sm font-medium text-gray-500">Action:</span>{' '}
+                                            <span className="text-sm text-gray-900">
                                                 {getCustomField(selectedStep, FIELD_IDS.MCP_EXPECTED_ACTION) || 'Not specified'}
                                             </span>
                                         </div>
@@ -1224,12 +1226,12 @@
                         )}
 
                         {/* Step Comments Section */}
-                        <div className="border rounded-lg overflow-hidden">
+                        <div className="bg-white border-b border-gray-200">
                             <div 
-                                className="bg-gray-50 px-4 py-2 cursor-pointer hover:bg-gray-100 transition-colors flex items-center justify-between"
+                                className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
                                 onClick={() => toggleSection('comments')}
                             >
-                                <span className="font-medium text-gray-700">
+                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                                     💬 Step Comments
                                     {stepComments.length > 0 && (
                                         <span className="ml-2 bg-gray-600 text-white text-xs px-2 py-0.5 rounded-full">
@@ -1294,7 +1296,7 @@
                         </div>
                     </div>
                 ) : (
-                    <div className="p-6 text-center text-gray-500">
+                    <div className="bg-white border-b border-gray-200 p-6 text-center text-gray-500">
                         <p>Select a step to view details</p>
                     </div>
                 )}
@@ -1619,151 +1621,91 @@
                     <div className="flex-1 overflow-y-auto">
                         <div className="bg-white shadow-lg">
                             {/* Header */}
-                            <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6">
-                                <h1 className="text-2xl font-bold">
+                            <div className="bg-white border-b border-gray-200 p-6">
+                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                                     {getCustomField(taskData, FIELD_IDS.WAIT_CONFIG) ? 'Wait Node Approval' : 'Process Library Viewer'}
-                                </h1>
-                                <p className="mt-2 opacity-90">{taskData.name}</p>
+                                </h3>
+                                <h1 className="text-2xl font-bold text-gray-900">{taskData.name}</h1>
                                 {taskData.custom_id && (
-                                    <p className="text-sm opacity-75 mt-1">
-                                        {getCustomField(taskData, FIELD_IDS.WAIT_CONFIG) ? 'Wait Node: ' : 'Task: '}{taskData.custom_id}
+                                    <p className="text-sm text-gray-500 mt-1">
+                                        {getCustomField(taskData, FIELD_IDS.WAIT_CONFIG) ? 'Wait Node: ' : 'Task: '}
+                                        <span className="font-mono text-gray-700">{taskData.custom_id}</span>
                                     </p>
                                 )}
                             </div>
 
                             {/* Process Library Root Info - Expandable Context */}
                             {processLibraryRoot && (
-                                <div style={{
-                                    backgroundColor: '#0A0A0A',
-                                    borderBottom: '0.5px solid #2A2A2A'
-                                }}>
-                            <div
-                                onClick={() => setExpandedContext(!expandedContext)}
-                                style={{
-                                    padding: '2rem 3rem',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                                    position: 'relative'
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#111111'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                            >
-                                <div style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center'
-                                }}>
-                                    <h2 style={{
-                                        fontSize: '0.875rem',
-                                        fontWeight: '500',
-                                        color: '#D4AF37',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.2em',
-                                        fontFamily: 'Playfair Display, serif'
-                                    }}>Process Context</h2>
-                                    <span style={{
-                                        color: '#D4AF37',
-                                        fontSize: '1.25rem',
-                                        transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                                        transform: expandedContext ? 'rotate(180deg)' : 'rotate(0deg)',
-                                        display: 'inline-block'
-                                    }}>⌄</span>
-                                </div>
-                                <div style={{
-                                    fontSize: '0.875rem',
-                                    color: 'rgba(255, 255, 255, 0.7)',
-                                    fontFamily: 'Inter, -apple-system, sans-serif',
-                                    marginTop: '1rem'
-                                }}>
-                                    <div style={{ marginBottom: '0.5rem' }}>
-                                        <span style={{ color: 'rgba(255, 255, 255, 0.5)' }}>Acting on: </span>
-                                        <a
-                                            href={`https://app.clickup.com/t/${processLibraryRoot.id}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            onClick={(e) => e.stopPropagation()}
-                                            style={{
-                                                color: '#D4AF37',
-                                                textDecoration: 'none',
-                                                transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
-                                            }}
-                                            onMouseEnter={(e) => e.target.style.textShadow = '0 0 20px rgba(212, 175, 55, 0.3)'}
-                                            onMouseLeave={(e) => e.target.style.textShadow = ''}
-                                        >
-                                            {processLibraryRoot.name}
-                                        </a>
+                                <div className="bg-gray-50 border-b border-gray-200">
+                                    <div
+                                        onClick={() => setExpandedContext(!expandedContext)}
+                                        className="p-4 cursor-pointer hover:bg-gray-100 transition-colors"
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                                Process Context
+                                            </h3>
+                                            <span className={`text-gray-400 transition-transform duration-200 ${
+                                                expandedContext ? 'rotate-180' : ''
+                                            }`}>
+                                                ▼
+                                            </span>
+                                        </div>
+                                        <div className="text-sm text-gray-700 mt-3">
+                                            <div className="mb-2">
+                                                <span className="text-gray-500">Acting on: </span>
+                                                <a
+                                                    href={`https://app.clickup.com/t/${processLibraryRoot.id}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="text-blue-600 hover:text-blue-800 transition-colors"
+                                                >
+                                                    {processLibraryRoot.name}
+                                                </a>
+                                            </div>
+                                            <div>
+                                                <span className="text-gray-500">Task: </span>
+                                                <span className="font-mono text-xs text-gray-600">
+                                                    {processLibraryRoot.custom_id || processLibraryRoot.id}
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <span style={{ color: 'rgba(255, 255, 255, 0.5)' }}>Task: </span>
-                                        <span style={{
-                                            fontFamily: 'SF Mono, Monaco, monospace',
-                                            fontSize: '0.75rem',
-                                            color: 'rgba(255, 255, 255, 0.4)'
-                                        }}>{processLibraryRoot.custom_id || processLibraryRoot.id}</span>
-                                    </div>
-                                </div>
-                            </div>
 
-                            {/* Expanded Context Content */}
-                            <div
-                                className={`accordion-content ${expandedContext ? 'show' : ''}`}
-                                style={{
-                                    backgroundColor: '#111111',
-                                    borderTop: expandedContext ? '0.5px solid #2A2A2A' : 'none'
-                                }}
-                            >
-                                {expandedContext && processLibraryRoot.description && (
-                                    <div style={{
-                                        padding: '2rem 3rem',
-                                        color: 'rgba(255, 255, 255, 0.6)',
-                                        fontFamily: 'Inter, -apple-system, sans-serif',
-                                        fontSize: '0.875rem',
-                                        lineHeight: '1.8'
-                                    }}>
-                                        <h3 style={{
-                                            fontSize: '0.75rem',
-                                            fontWeight: '500',
-                                            color: 'rgba(255, 255, 255, 0.4)',
-                                            marginBottom: '1rem',
-                                            textTransform: 'uppercase',
-                                            letterSpacing: '0.1em'
-                                        }}>Task Description</h3>
-                                        <div
-                                            className="markdown-content"
-                                            style={{
-                                                color: 'rgba(255, 255, 255, 0.7)',
-                                                maxHeight: '300px',
-                                                overflowY: 'auto',
-                                                paddingRight: '1rem'
-                                            }}
-                                            dangerouslySetInnerHTML={{
-                                                __html: renderMarkdown(processLibraryRoot.description || 'No description available')
-                                            }}
-                                        />
+                                    {/* Expanded Context Content */}
+                                    <div className={`accordion-content ${expandedContext ? 'show' : ''}`}>
+                                        {expandedContext && processLibraryRoot.description && (
+                                            <div className="bg-white border-t border-gray-200 p-4">
+                                                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                                                    Task Description
+                                                </h4>
+                                                <div
+                                                    className="markdown-content text-sm text-gray-700 max-h-80 overflow-y-auto pr-4"
+                                                    dangerouslySetInnerHTML={{
+                                                        __html: renderMarkdown(processLibraryRoot.description || 'No description available')
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+                                        {expandedContext && !processLibraryRoot.description && (
+                                            <div className="bg-white border-t border-gray-200 p-4">
+                                                <p className="text-sm text-gray-500 italic">
+                                                    No task description available
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                                {expandedContext && !processLibraryRoot.description && (
-                                    <div style={{
-                                        padding: '2rem 3rem',
-                                        color: 'rgba(255, 255, 255, 0.4)',
-                                        fontFamily: 'Inter, -apple-system, sans-serif',
-                                        fontSize: '0.875rem',
-                                        fontStyle: 'italic'
-                                    }}>
-                                        No task description available
-                                    </div>
-                                )}
                                 </div>
-                            </div>
                             )}
 
                             {/* Process Context */}
                             {processText && (
-                                <div className="p-5 border-b border-gray-200">
-                                    <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                                <div className="bg-white border-b border-gray-200 p-6">
+                                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
                                         📋 Process Context
                                     </h3>
-                                    <div className="bg-yellow-50 p-4 rounded-lg font-mono text-sm text-gray-700 whitespace-pre-wrap">
+                                    <div className="bg-gray-50 p-4 rounded-lg font-mono text-sm text-gray-700 whitespace-pre-wrap">
                                         {processText}
                                     </div>
                                 </div>
@@ -1782,7 +1724,7 @@
                                     }}
                                 />
                             ) : (
-                                <div className="p-5 bg-gray-50 border-t border-gray-200">
+                                <div className="p-6 bg-gray-50 border-b border-gray-200">
                                     <div className="text-center">
                                         <p className="text-gray-600">This is not a wait node task. Viewing process steps only.</p>
                                     </div>
@@ -1790,7 +1732,8 @@
                             )}
 
                             {/* Summary Stats */}
-                            <div className="p-5 bg-gray-50 border-t border-gray-200">
+                            <div className="p-6 bg-gray-50 border-b border-gray-200">
+                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Summary</h3>
                                 <div className="grid grid-cols-3 gap-4 text-center">
                                     <div>
                                         <div className="text-2xl font-bold text-gray-900">{subtasks.length}</div>
