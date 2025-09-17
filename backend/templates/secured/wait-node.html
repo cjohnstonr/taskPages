@@ -210,10 +210,7 @@
         return field?.value || field?.value_richtext || null;
     }
 
-    // Authentication helper
-    function getAuthToken() {
-        return localStorage.getItem('auth_token');
-    }
+    // Authentication helper - removed, using session cookies instead
 
     async function checkAuthentication() {
         // For backend-served pages, we're on same origin as the API

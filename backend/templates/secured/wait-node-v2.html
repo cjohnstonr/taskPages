@@ -219,9 +219,7 @@
             this.baseUrl = BACKEND_URL;
         }
 
-        getAuthToken() {
-            return localStorage.getItem('auth_token');
-        }
+        // Removed getAuthToken - using session cookies instead
 
         async checkAuthentication() {
             // For backend-served pages, we're on same origin as the API
@@ -844,16 +842,12 @@
             
             setLoading(true);
             try {
-                const authToken = localStorage.getItem('auth_token');
-                if (!authToken) {
-                    console.error('No auth token found');
-                    window.location.href = 'https://taskpages-frontend.onrender.com';
-                    return;
-                }
+                // Use session cookie authentication, not localStorage token
                 const response = await fetch(`${BACKEND_URL}/api/task/${mainTask.id}/comments?limit=5`, {
+                    credentials: 'include',  // Include session cookie
                     headers: {
-                        'Authorization': `Bearer ${authToken}`,
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     }
                 });
                 if (response.status === 401) {
@@ -880,16 +874,12 @@
             
             setLoading(true);
             try {
-                const authToken = localStorage.getItem('auth_token');
-                if (!authToken) {
-                    console.error('No auth token found');
-                    window.location.href = 'https://taskpages-frontend.onrender.com';
-                    return;
-                }
+                // Use session cookie authentication, not localStorage token
                 const response = await fetch(`${BACKEND_URL}/api/task/${mainTask.id}/comments?start=${comments.length}&limit=5`, {
+                    credentials: 'include',  // Include session cookie
                     headers: {
-                        'Authorization': `Bearer ${authToken}`,
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     }
                 });
                 if (response.status === 401) {
