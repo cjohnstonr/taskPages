@@ -6,44 +6,20 @@
     <title>Process Library Viewer</title>
 
     <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com">
-{% raw %}
-
-{% endraw %}
-</script>
+    <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- React & ReactDOM -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js">
-{% raw %}
-
-{% endraw %}
-</script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">
-{% raw %}
-
-{% endraw %}
-</script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
     <!-- Marked.js for Markdown -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js">
-{% raw %}
-
-{% endraw %}
-</script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <!-- DOMPurify for sanitization -->
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js">
-{% raw %}
-
-{% endraw %}
-</script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 
     <!-- Babel for JSX -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js">
-{% raw %}
-
-{% endraw %}
-</script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
       /* Accordion animations */
@@ -163,13 +139,13 @@
 <div id="root"></div>
 
 <script type="text/babel">
-{% raw %}
-
     const { useState, useEffect, useMemo } = React;
 
     // Configuration - Using Python backend
-    // Use same origin since page is served from backend
-    const BACKEND_URL = window.location.origin;
+    // Handle file:// protocol and localhost
+    const BACKEND_URL = (!window.location.hostname || window.location.hostname === 'localhost' || window.location.protocol === 'file:')
+        ? 'http://localhost:5678' 
+        : 'https://taskpages-backend.onrender.com'; // Production backend URL on Render
     const PROCESS_LIBRARY_TYPE = 1018; // custom_item_id for Process Library tasks
 
     // Custom field IDs
@@ -223,60 +199,38 @@
             return localStorage.getItem('auth_token');
         }
 
-        async checkAuthentication() {
-            // For backend-served pages, we're on same origin as the API
-            // Session cookie will automatically be included
-            try {
-                const res = await fetch('/auth/status', {
-                    credentials: 'include',  // Include session cookie
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                });
-                
-                if (res.status === 401) {
-                    console.log('Not authenticated, redirecting to login...');
-                    window.location.href = '/auth/login';
-                    return false;
-                }
-                
-                const data = await res.json();
-                if (data.authenticated) {
-                    console.log('Authenticated via session cookie');
-                    return true;
-                }
-            } catch (error) {
-                console.error('Auth check failed:', error);
-            }
-            
-            // Not authenticated, redirect to login
-            window.location.href = '/auth/login';
-            return false;
+        checkAuthentication() {
+            // DEMO MODE: Authentication disabled
+            return true;
         }
 
         async request(endpoint, options = {}) {
+            // DEMO MODE: Use fake token
+            const authToken = 'demo-token';
+
             try {
                 const response = await fetch(`${this.baseUrl}${endpoint}`, {
                     ...options,
-                    credentials: 'include',  // Always include cookies for same-origin
                     headers: {
+                        'Authorization': `Bearer ${authToken}`,
                         'Content-Type': 'application/json',
                         ...options.headers
                     }
                 });
-                
+
                 // Handle authentication errors
                 if (response.status === 401) {
                     console.error('Authentication failed, redirecting to login...');
-                    window.location.href = '/auth/login';
+                    localStorage.removeItem('auth_token');
+                    window.location.href = '/index.html';
                     throw new Error('Authentication failed');
                 }
-                
+
                 if (!response.ok) {
                     const errorData = await response.json();
                     throw new Error(`API error: ${response.status} - ${JSON.stringify(errorData)}`);
                 }
-                
+
                 return await response.json();
             } catch (error) {
                 console.error('Backend API request failed:', error);
@@ -847,7 +801,7 @@
                 const authToken = localStorage.getItem('auth_token');
                 if (!authToken) {
                     console.error('No auth token found');
-                    window.location.href = 'https://taskpages-frontend.onrender.com';
+                    window.location.href = '/index.html';
                     return;
                 }
                 const response = await fetch(`${BACKEND_URL}/api/task/${mainTask.id}/comments?limit=5`, {
@@ -857,8 +811,8 @@
                     }
                 });
                 if (response.status === 401) {
-                    // Not authenticated, redirect to login
-                    window.location.href = '/auth/login';
+                    localStorage.removeItem('auth_token');
+                    window.location.href = '/index.html';
                     return;
                 }
                 if (response.ok) {
@@ -883,7 +837,7 @@
                 const authToken = localStorage.getItem('auth_token');
                 if (!authToken) {
                     console.error('No auth token found');
-                    window.location.href = 'https://taskpages-frontend.onrender.com';
+                    window.location.href = '/index.html';
                     return;
                 }
                 const response = await fetch(`${BACKEND_URL}/api/task/${mainTask.id}/comments?start=${comments.length}&limit=5`, {
@@ -893,8 +847,8 @@
                     }
                 });
                 if (response.status === 401) {
-                    // Not authenticated, redirect to login
-                    window.location.href = '/auth/login';
+                    localStorage.removeItem('auth_token');
+                    window.location.href = '/index.html';
                     return;
                 }
                 if (response.ok) {
@@ -1045,17 +999,21 @@
         const loadStepComments = async (stepId) => {
             setLoadingComments(true);
             try {
-                // Use session cookie authentication, not localStorage token
+                const authToken = localStorage.getItem('auth_token');
+                if (!authToken) {
+                    console.error('No auth token found');
+                    window.location.href = '/index.html';
+                    return;
+                }
                 const response = await fetch(`${BACKEND_URL}/api/task/${stepId}/comments?limit=5`, {
-                    credentials: 'include',  // Include session cookie
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
                     }
                 });
                 if (response.status === 401) {
-                    // Not authenticated, redirect to login
-                    window.location.href = '/auth/login';
+                    localStorage.removeItem('auth_token');
+                    window.location.href = '/index.html';
                     return;
                 }
                 if (response.ok) {
@@ -1076,17 +1034,21 @@
             
             setLoadingComments(true);
             try {
-                // Use session cookie authentication, not localStorage token
+                const authToken = localStorage.getItem('auth_token');
+                if (!authToken) {
+                    console.error('No auth token found');
+                    window.location.href = '/index.html';
+                    return;
+                }
                 const response = await fetch(`${BACKEND_URL}/api/task/${selectedStep.id}/comments?start=${stepComments.length}&limit=5`, {
-                    credentials: 'include',  // Include session cookie
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
                     }
                 });
                 if (response.status === 401) {
-                    // Not authenticated, redirect to login
-                    window.location.href = '/auth/login';
+                    localStorage.removeItem('auth_token');
+                    window.location.href = '/index.html';
                     return;
                 }
                 if (response.ok) {
@@ -1552,11 +1514,7 @@
                 setLoading(true);
                 setError(null);
 
-                // Check authentication first
-                if (!api.checkAuthentication()) {
-                    console.log('User not authenticated, redirecting to login...');
-                    return; // checkAuthentication() will redirect
-                }
+                // DEMO MODE: Skip authentication check
 
                 // Get task ID from URL or use default
                 const params = getUrlParams();
@@ -1836,8 +1794,6 @@
 
     // Render the app
     ReactDOM.render(<WaitApprovalApp />, document.getElementById('root'));
-
-{% endraw %}
 </script>
 </body>
 </html>

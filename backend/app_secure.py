@@ -263,6 +263,7 @@ def initialize_wait_node(task_id):
         return jsonify({
             "root_task": root_task,
             "wait_task": wait_task,
+            "main_task": root_task,  # Frontend expects 'main_task' for the left panel
             "subtasks": subtasks
         })
     
@@ -390,6 +391,29 @@ def get_subtasks_detailed(task_id):
     
     except Exception as e:
         logger.error(f"Error in get_subtasks_detailed: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route('/api/task/<task_id>/comments', methods=['GET'])
+@login_required
+@rate_limiter.rate_limit(limit='100 per minute')
+def get_task_comments(task_id):
+    """Get comments for a task"""
+    try:
+        # Get pagination parameters
+        start = request.args.get('start', 0, type=int)
+        limit = request.args.get('limit', 10, type=int)
+        
+        # For now, return empty comments since ClickUp integration is not implemented
+        # TODO: Implement actual ClickUp comments fetching
+        return jsonify({
+            "comments": [],
+            "has_more": False,
+            "total": 0
+        })
+    
+    except Exception as e:
+        logger.error(f"Error in get_task_comments: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
 
