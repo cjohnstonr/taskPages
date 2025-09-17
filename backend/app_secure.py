@@ -158,10 +158,23 @@ class ClickUpService:
         # Process and normalize the comment data
         comments = []
         for comment in data.get('comments', []):
+            # Format the date for frontend compatibility
+            raw_date = comment.get('date')
+            date_formatted = None
+            if raw_date:
+                try:
+                    from datetime import datetime
+                    timestamp = int(raw_date) if isinstance(raw_date, str) else raw_date
+                    dt = datetime.fromtimestamp(timestamp / 1000)  # ClickUp uses milliseconds
+                    date_formatted = dt.strftime('%b %d, %Y')
+                except (ValueError, TypeError):
+                    date_formatted = 'Invalid date'
+            
             comments.append({
                 'id': comment.get('id'),
                 'text': comment.get('comment_text', ''),
                 'date': comment.get('date'),
+                'date_formatted': date_formatted or 'No date',
                 'user': {
                     'id': comment.get('user', {}).get('id'),
                     'username': comment.get('user', {}).get('username', 'Unknown'),
