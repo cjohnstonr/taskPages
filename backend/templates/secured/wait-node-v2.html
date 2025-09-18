@@ -1116,7 +1116,7 @@
         };
         
         return (
-            <div className="bg-white border-b-4 border-blue-200">
+            <div className="bg-white border-b-4 border-gray-300">
                 {/* Parent Task Header */}
                 <div className="p-4 bg-blue-50 border-b border-blue-200">
                     <div className="flex items-center justify-between mb-2">
@@ -1600,8 +1600,8 @@
                 {/* Section 4: Recent Activity */}
                 <CommentsSection mainTask={mainTask} />
                 
-                {/* Divider between main task and step details */}
-                <div className="h-2 bg-gray-300"></div>
+                {/* Thick divider between Process Library and Step Details */}
+                <div className="border-b-4 border-gray-300"></div>
                 
                 {/* Section 5: Step Details - Moved from right panel */}
                 {subtasks && subtasks.length > 0 && (
