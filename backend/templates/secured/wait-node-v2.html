@@ -1040,6 +1040,41 @@
         );
     }
 
+    // Resize Handle Component for panel resizing
+    function ResizeHandle({ onMouseDown, onDoubleClick, isResizing }) {
+        const [isHovered, setIsHovered] = useState(false);
+        
+        return (
+            <div 
+                className={`
+                    relative flex items-center justify-center
+                    bg-gray-300 
+                    cursor-col-resize 
+                    transition-all duration-150
+                    ${isResizing ? 'w-2 bg-blue-500 shadow-lg' : 'w-1 hover:w-2 hover:bg-blue-500 hover:shadow-lg'}
+                `}
+                onMouseDown={onMouseDown}
+                onDoubleClick={onDoubleClick}
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
+                style={{ 
+                    userSelect: 'none',
+                    touchAction: 'none'
+                }}
+                title="Drag to resize panel • Double-click to reset"
+            >
+                {/* Grip indicator - visible on hover or during resize */}
+                <div className="absolute inset-y-0 flex items-center pointer-events-none">
+                    <div className={`space-y-1 transition-opacity ${(isResizing || isHovered) ? 'opacity-100' : 'opacity-0'}`}>
+                        <div className="w-1 h-1 bg-white rounded-full"></div>
+                        <div className="w-1 h-1 bg-white rounded-full"></div>
+                        <div className="w-1 h-1 bg-white rounded-full"></div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    
     // Parent Task Section Component - Shows the actual parent task details
     function ParentTaskSection({ parentTask }) {
         const [comments, setComments] = useState([]);
@@ -1276,8 +1311,12 @@
     }
 
     // Enhanced Left Panel Component with Main Task and Step Details
-    function MainTaskPanel({ parentTask, mainTask, subtasks, selectedStepId, onStepSelect }) {
+    function MainTaskPanel({ parentTask, mainTask, subtasks, selectedStepId, onStepSelect, panelWidth }) {
         if (!mainTask) return null;
+        
+        // Width-based responsive adjustments
+        const isNarrow = panelWidth && panelWidth < 300;
+        const isWide = panelWidth && panelWidth > 450;
         
         // Step Details state management
         const [selectedStep, setSelectedStep] = useState(null);
@@ -1845,10 +1884,91 @@
         // Parent task states
         const [parentTask, setParentTask] = useState(null);
         const [hierarchyInfo, setHierarchyInfo] = useState(null);
+        
+        // Resizable panel states
+        const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
+            const saved = localStorage.getItem('waitNodePanelWidth');
+            return saved ? parseInt(saved) : 320; // Default w-80 = 320px
+        });
+        const [isResizing, setIsResizing] = useState(false);
+        const [isMobile, setIsMobile] = useState(false);
+        
+        // Constants for resize constraints
+        const MIN_PANEL_WIDTH = 280;
+        const MAX_PANEL_WIDTH = 600;
+        const DEFAULT_WIDTH = 320;
 
         useEffect(() => {
             initializeApp();
         }, []);
+        
+        // Mobile detection
+        useEffect(() => {
+            const checkMobile = () => {
+                setIsMobile(window.innerWidth < 768); // Tailwind's md: breakpoint
+            };
+            checkMobile();
+            window.addEventListener('resize', checkMobile);
+            return () => window.removeEventListener('resize', checkMobile);
+        }, []);
+        
+        // Mouse event handlers for resizing
+        useEffect(() => {
+            if (!isResizing) return;
+            
+            // Disable text selection and set cursor during resize
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor = 'col-resize';
+            
+            const handleMouseMove = (e) => {
+                requestAnimationFrame(() => {
+                    const newWidth = e.clientX;
+                    
+                    // Apply constraints
+                    const constrainedWidth = Math.min(
+                        Math.max(newWidth, MIN_PANEL_WIDTH),
+                        Math.min(MAX_PANEL_WIDTH, window.innerWidth * 0.5)
+                    );
+                    
+                    setLeftPanelWidth(constrainedWidth);
+                });
+            };
+            
+            const handleMouseUp = () => {
+                setIsResizing(false);
+                document.body.style.userSelect = '';
+                document.body.style.cursor = '';
+                
+                // Persist to localStorage
+                localStorage.setItem('waitNodePanelWidth', leftPanelWidth.toString());
+            };
+            
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            
+            return () => {
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+                document.body.style.userSelect = '';
+                document.body.style.cursor = '';
+            };
+        }, [isResizing, leftPanelWidth]);
+        
+        // ESC key to cancel resize
+        useEffect(() => {
+            const handleKeyDown = (e) => {
+                if (e.key === 'Escape' && isResizing) {
+                    setIsResizing(false);
+                    document.body.style.userSelect = '';
+                    document.body.style.cursor = '';
+                }
+            };
+            
+            if (isResizing) {
+                document.addEventListener('keydown', handleKeyDown);
+                return () => document.removeEventListener('keydown', handleKeyDown);
+            }
+        }, [isResizing]);
 
         async function initializeApp() {
             try {
@@ -1934,20 +2054,61 @@
 
         return (
             <div className="min-h-screen bg-gray-100">
-                <div className="flex h-screen">
-                    {/* Left Panel - Enhanced with Main Task Context and Step Details */}
-                    <div className="w-80 flex-shrink-0">
+                {/* Overlay during resize to prevent content interaction */}
+                {isResizing && (
+                    <div className="fixed inset-0 z-40" style={{ cursor: 'col-resize' }} />
+                )}
+                
+                {/* Optional: Width indicator during resize */}
+                {isResizing && (
+                    <div className="fixed z-50 bg-gray-800 text-white px-2 py-1 rounded text-xs pointer-events-none"
+                         style={{ 
+                             left: leftPanelWidth + 10, 
+                             top: '50%',
+                             transform: 'translateY(-50%)'
+                         }}>
+                        {leftPanelWidth}px
+                    </div>
+                )}
+                
+                <div className="flex h-screen relative">
+                    {/* Left Panel with dynamic width */}
+                    <div 
+                        style={{ 
+                            width: isMobile ? '100%' : `${leftPanelWidth}px`,
+                            minWidth: `${MIN_PANEL_WIDTH}px`,
+                            maxWidth: `${MAX_PANEL_WIDTH}px`,
+                            transition: isResizing ? 'none' : 'width 0.2s ease-out'
+                        }}
+                        className="flex-shrink-0 relative"
+                    >
                         <MainTaskPanel 
                             parentTask={parentTask}
                             mainTask={mainTask} 
                             subtasks={subtasks}
                             selectedStepId={selectedStepId}
                             onStepSelect={setSelectedStepId}
+                            panelWidth={leftPanelWidth}
                         />
                     </div>
                     
-                    {/* Main Content Area - Now has more horizontal space */}
-                    <div className="flex-1 overflow-y-auto">
+                    {/* Resize Handle - Hidden on mobile */}
+                    {!isMobile && (
+                        <ResizeHandle 
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                setIsResizing(true);
+                            }}
+                            onDoubleClick={() => {
+                                setLeftPanelWidth(DEFAULT_WIDTH);
+                                localStorage.setItem('waitNodePanelWidth', DEFAULT_WIDTH.toString());
+                            }}
+                            isResizing={isResizing}
+                        />
+                    )}
+                    
+                    {/* Main Content Area - Hidden on mobile to give full width to panel */}
+                    <div className={`flex-1 overflow-y-auto min-w-0 ${isMobile ? 'hidden md:block' : ''}`}>
                         <div className="bg-white shadow-lg">
                             {/* Header */}
                             <div className="bg-white border-b border-gray-200 p-6">
