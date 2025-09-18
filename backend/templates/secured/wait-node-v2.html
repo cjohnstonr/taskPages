@@ -1806,9 +1806,6 @@
                                 </div>
                             )}
 
-                            {/* Process Steps Accordion */}
-                            <ProcessStepsAccordion subtasks={subtasks} />
-
                             {/* Approval Module - Only show for wait nodes */}
                             {taskData && getCustomField(taskData, FIELD_IDS.WAIT_CONFIG) ? (
                                 <ApprovalModule
@@ -1825,6 +1822,9 @@
                                     </div>
                                 </div>
                             )}
+
+                            {/* Process Steps Accordion */}
+                            <ProcessStepsAccordion subtasks={subtasks} />
 
                             {/* Summary Stats */}
                             <div className="p-6 bg-gray-50 border-b border-gray-200">
