@@ -203,32 +203,48 @@ class ClickUpService:
         
         return response.json()
     
-    def find_process_library_root(self, start_task_id: str) -> Optional[Dict[str, Any]]:
-        """Find the top-level Process Library parent task"""
+    def find_process_library_root(self, start_task_id: str) -> Dict[str, Any]:
+        """Find the top-level Process Library parent task and its parent"""
         current_task = self.get_task(start_task_id, custom_task_ids=True)
         last_process_library_task = None
+        parent_task = None
+        visited = set()  # Prevent infinite loops
+        max_depth = 10  # Safety limit
+        depth = 0
         
         # If the starting task is a Process Library task, include it
         if current_task.get('custom_item_id') == PROCESS_LIBRARY_TYPE:
             last_process_library_task = current_task
         
         # Traverse up the parent chain
-        while current_task.get('parent'):
+        while current_task.get('parent') and current_task['id'] not in visited and depth < max_depth:
+            visited.add(current_task['id'])
+            depth += 1
             logger.info(f"Checking task {current_task['id']} (type: {current_task.get('custom_item_id')})")
             
-            parent_task = self.get_task(current_task['parent'], custom_task_ids=True)
-            
-            if parent_task.get('custom_item_id') == PROCESS_LIBRARY_TYPE:
-                # This parent is still a Process Library task
-                last_process_library_task = parent_task
-                current_task = parent_task
-            else:
-                # This parent is NOT a Process Library task, so we stop
-                logger.info(f"Found non-Process Library parent: {parent_task['id']}")
+            try:
+                potential_parent = self.get_task(current_task['parent'], custom_task_ids=True)
+                
+                if potential_parent.get('custom_item_id') == PROCESS_LIBRARY_TYPE:
+                    # This parent is still a Process Library task
+                    last_process_library_task = potential_parent
+                    current_task = potential_parent
+                else:
+                    # This parent is NOT a Process Library task, so we stop
+                    parent_task = potential_parent
+                    logger.info(f"Found parent task: {parent_task['id']} - {parent_task.get('name')}")
+                    break
+            except Exception as e:
+                logger.error(f"Error fetching parent task: {e}")
                 break
         
         logger.info(f"Process Library root found: {last_process_library_task.get('id') if last_process_library_task else None}")
-        return last_process_library_task
+        logger.info(f"Parent task found: {parent_task.get('id') if parent_task else None}")
+        
+        return {
+            'process_root': last_process_library_task,
+            'parent_task': parent_task  # May be None if Process Library is top-level
+        }
     
     def fetch_subtasks_with_details(self, parent_task_id: str) -> List[Dict[str, Any]]:
         """Fetch all subtasks with their custom fields"""
@@ -301,10 +317,13 @@ def initialize_wait_node(task_id):
     try:
         logger.info(f"Initializing wait node for task: {task_id} by user: {request.user.get('email')}")
         
-        # Find process library root
-        root_task = clickup_service.find_process_library_root(task_id)
-        if not root_task:
+        # Find process library root and parent
+        result = clickup_service.find_process_library_root(task_id)
+        if not result.get('process_root'):
             return jsonify({"error": "Could not find Process Library root task"}), 404
+        
+        root_task = result['process_root']
+        parent_task = result.get('parent_task')  # May be None if Process Library is top-level
         
         # Get wait task details
         wait_task = clickup_service.get_task(task_id, custom_task_ids=True)
@@ -312,11 +331,25 @@ def initialize_wait_node(task_id):
         # Get all subtasks
         subtasks = clickup_service.fetch_subtasks_with_details(root_task['id'])
         
+        # Build hierarchy info for clarity
+        hierarchy = {
+            "parent_id": parent_task['id'] if parent_task else None,
+            "parent_name": parent_task['name'] if parent_task else None,
+            "process_library_id": root_task['id'],
+            "process_library_name": root_task['name'],
+            "wait_node_id": wait_task['id'],
+            "wait_node_name": wait_task['name']
+        }
+        
+        logger.info(f"Hierarchy: Parent={hierarchy['parent_name']}, Process={hierarchy['process_library_name']}, Wait={hierarchy['wait_node_name']}")
+        
         return jsonify({
+            "parent_task": parent_task,  # NEW: The actual parent (may be None)
             "root_task": root_task,
             "wait_task": wait_task,
-            "main_task": root_task,  # Frontend expects 'main_task' for the left panel
-            "subtasks": subtasks
+            "main_task": root_task,  # Keep for backward compatibility
+            "subtasks": subtasks,
+            "hierarchy": hierarchy  # NEW: Clear hierarchy info
         })
     
     except requests.exceptions.HTTPError as e:
