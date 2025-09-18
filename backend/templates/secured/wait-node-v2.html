@@ -1035,7 +1035,9 @@
         );
     }
 
-    // Step Details Panel Component (Right Panel)
+    // DEPRECATED: Step Details Panel Component (Right Panel) - Now integrated into MainTaskPanel
+    // Keeping for reference - can be deleted once migration is verified
+    /*
     function StepDetailsPanel({ subtasks, selectedStepId, onStepSelect }) {
         const [selectedStep, setSelectedStep] = useState(null);
         const [stepComments, setStepComments] = useState([]);
@@ -1359,10 +1361,116 @@
             </div>
         );
     }
+    */
 
-    // Left Panel Component for Main Task
-    function MainTaskPanel({ mainTask }) {
+    // Enhanced Left Panel Component with Main Task and Step Details
+    function MainTaskPanel({ mainTask, subtasks, selectedStepId, onStepSelect }) {
         if (!mainTask) return null;
+        
+        // Step Details state management
+        const [selectedStep, setSelectedStep] = useState(null);
+        const [stepComments, setStepComments] = useState([]);
+        const [loadingStepComments, setLoadingStepComments] = useState(false);
+        const [hasMoreStepComments, setHasMoreStepComments] = useState(false);
+        const [stepSectionsExpanded, setStepSectionsExpanded] = useState({
+            description: false,
+            processText: true,
+            mcpInfo: true,
+            comments: true
+        });
+        
+        // Update selected step when selection changes
+        useEffect(() => {
+            if (selectedStepId && subtasks) {
+                const step = subtasks.find(s => s.id === selectedStepId);
+                setSelectedStep(step);
+                if (step) {
+                    loadStepComments(step.id);
+                }
+            }
+        }, [selectedStepId, subtasks]);
+        
+        const loadStepComments = async (stepId) => {
+            console.log('🔍 [STEP COMMENTS] loadStepComments called for stepId:', stepId);
+            
+            setLoadingStepComments(true);
+            try {
+                const commentsUrl = `${BACKEND_URL}/api/task/${stepId}/comments?limit=5`;
+                console.log('🔍 [STEP COMMENTS] API URL:', commentsUrl);
+                
+                const response = await fetch(commentsUrl, {
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                console.log('🔍 [STEP COMMENTS] Response status:', response.status);
+                
+                if (response.status === 401) {
+                    console.warn('⚠️ [STEP COMMENTS] 401 Unauthorized, redirecting to login');
+                    window.location.href = '/auth/login';
+                    return;
+                }
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('🔍 [STEP COMMENTS] Comments count:', data.comments?.length || 0);
+                    setStepComments(data.comments || []);
+                    setHasMoreStepComments(data.has_more || false);
+                } else {
+                    const errorText = await response.text();
+                    console.error('❌ [STEP COMMENTS] Failed to fetch comments:', response.status, errorText);
+                }
+            } catch (error) {
+                console.error('❌ [STEP COMMENTS] Error loading step comments:', error);
+                setStepComments([]);
+            } finally {
+                setLoadingStepComments(false);
+            }
+        };
+        
+        const loadMoreStepComments = async () => {
+            if (!selectedStep || loadingStepComments) return;
+            
+            setLoadingStepComments(true);
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/task/${selectedStep.id}/comments?start=${stepComments.length}&limit=5`, {
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+                if (response.status === 401) {
+                    window.location.href = '/auth/login';
+                    return;
+                }
+                if (response.ok) {
+                    const data = await response.json();
+                    setStepComments(prev => [...prev, ...(data.comments || [])]);
+                    setHasMoreStepComments(data.has_more || false);
+                }
+            } catch (error) {
+                console.error('Error loading more step comments:', error);
+            } finally {
+                setLoadingStepComments(false);
+            }
+        };
+        
+        const toggleStepSection = (section) => {
+            setStepSectionsExpanded(prev => ({
+                ...prev,
+                [section]: !prev[section]
+            }));
+        };
+        
+        const handleStepChange = (e) => {
+            const stepId = e.target.value;
+            if (stepId && onStepSelect) {
+                onStepSelect(stepId);
+            }
+        };
 
         // Format date
         const formatDate = (timestamp) => {
@@ -1576,6 +1684,234 @@
 
                 {/* Section 4: Recent Activity */}
                 <CommentsSection mainTask={mainTask} />
+                
+                {/* Divider between main task and step details */}
+                <div className="h-2 bg-gray-300"></div>
+                
+                {/* Section 5: Step Details - Moved from right panel */}
+                {subtasks && subtasks.length > 0 && (
+                    <div className="bg-white">
+                        {/* Step Details Header */}
+                        <div className="p-4 bg-white border-b border-gray-200">
+                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                                📋 Step Details
+                            </h3>
+                            
+                            {/* Step Selector Dropdown - adjusted for narrower width */}
+                            <select 
+                                value={selectedStep?.id || ''}
+                                onChange={handleStepChange}
+                                className="w-full px-2 py-1.5 text-sm bg-white border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="" className="text-gray-800">Select a step...</option>
+                                {subtasks.map((step) => {
+                                    const stepNumber = getCustomField(step, FIELD_IDS.STEP_NUMBER) || '?';
+                                    const stepName = step.name?.length > 30 ? step.name.substring(0, 30) + '...' : step.name;
+                                    return (
+                                        <option key={step.id} value={step.id} className="text-gray-800">
+                                            Step {stepNumber}: {stepName}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                        </div>
+                        
+                        {/* Step Details Content */}
+                        {selectedStep ? (
+                            <div>
+                                {/* Step Info */}
+                                <div className="p-4 bg-white border-b border-gray-200">
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-gray-500">Step:</span>
+                                            <span className="text-sm font-medium text-gray-900">{selectedStep.name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-gray-500">Status:</span>
+                                            <span className="text-sm text-gray-700">{selectedStep.status?.status || 'Unknown'}</span>
+                                        </div>
+                                        {selectedStep.custom_id && (
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-gray-500">ID:</span>
+                                                <a
+                                                    href={`https://app.clickup.com/t/${selectedStep.id}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-sm text-blue-600 hover:text-blue-800 font-mono"
+                                                >
+                                                    {selectedStep.custom_id}
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                
+                                {/* Step Description Section */}
+                                {selectedStep.description && (
+                                    <div className="bg-white border-b border-gray-200">
+                                        <div 
+                                            className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                            onClick={() => toggleStepSection('description')}
+                                        >
+                                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">📝 Description</span>
+                                            <span className="text-gray-400">
+                                                {stepSectionsExpanded.description ? '▼' : '▶'}
+                                            </span>
+                                        </div>
+                                        {stepSectionsExpanded.description && (
+                                            <div className="p-4 prose prose-sm max-w-none">
+                                                <div dangerouslySetInnerHTML={{
+                                                    __html: DOMPurify.sanitize(marked.parse(selectedStep.description))
+                                                }} />
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                
+                                {/* Process Text Section */}
+                                {getCustomField(selectedStep, FIELD_IDS.PROCESS_TEXT) && (
+                                    <div className="bg-white border-b border-gray-200">
+                                        <div 
+                                            className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                            onClick={() => toggleStepSection('processText')}
+                                        >
+                                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">🔧 Process Text</span>
+                                            <span className="text-gray-400">
+                                                {stepSectionsExpanded.processText ? '▼' : '▶'}
+                                            </span>
+                                        </div>
+                                        {stepSectionsExpanded.processText && (
+                                            <div className="p-4 prose prose-sm max-w-none">
+                                                <div dangerouslySetInnerHTML={{
+                                                    __html: DOMPurify.sanitize(marked.parse(getCustomField(selectedStep, FIELD_IDS.PROCESS_TEXT)))
+                                                }} />
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                
+                                {/* MCP Information Section */}
+                                {(getCustomField(selectedStep, FIELD_IDS.MCP_NAME) || getCustomField(selectedStep, FIELD_IDS.MCP_EXPECTED_ACTION)) && (
+                                    <div className="bg-white border-b border-gray-200">
+                                        <div 
+                                            className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                            onClick={() => toggleStepSection('mcpInfo')}
+                                        >
+                                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">🤖 MCP Information</span>
+                                            <span className="text-gray-400">
+                                                {stepSectionsExpanded.mcpInfo ? '▼' : '▶'}
+                                            </span>
+                                        </div>
+                                        {stepSectionsExpanded.mcpInfo && (
+                                            <div className="p-4 space-y-3">
+                                                {getCustomField(selectedStep, FIELD_IDS.MCP_NAME) && (
+                                                    <div>
+                                                        <span className="text-xs text-gray-500">MCP Name:</span>
+                                                        <p className="text-sm font-medium text-gray-900">{getCustomField(selectedStep, FIELD_IDS.MCP_NAME)}</p>
+                                                    </div>
+                                                )}
+                                                {getCustomField(selectedStep, FIELD_IDS.MCP_EXPECTED_ACTION) && (
+                                                    <div>
+                                                        <span className="text-xs text-gray-500">Expected Action:</span>
+                                                        <p className="text-sm text-gray-700">{getCustomField(selectedStep, FIELD_IDS.MCP_EXPECTED_ACTION)}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                
+                                {/* Step Comments Section */}
+                                <div className="bg-white border-b border-gray-200">
+                                    <div 
+                                        className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                        onClick={() => toggleStepSection('comments')}
+                                    >
+                                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                            💬 Comments {stepComments.length > 0 && `(${stepComments.length})`}
+                                        </span>
+                                        <span className="text-gray-400">
+                                            {stepSectionsExpanded.comments ? '▼' : '▶'}
+                                        </span>
+                                    </div>
+                                    
+                                    {stepSectionsExpanded.comments && (
+                                        <div className="p-4">
+                                            {loadingStepComments && stepComments.length === 0 ? (
+                                                <p className="text-gray-500 text-sm">Loading comments...</p>
+                                            ) : stepComments.length === 0 ? (
+                                                <p className="text-gray-500 text-sm">No comments for this step</p>
+                                            ) : (
+                                                <>
+                                                    <div className="space-y-3">
+                                                        {stepComments.map((comment) => {
+                                                            // Graceful degradation for malformed step comments
+                                                            if (!comment || !comment.id) {
+                                                                return null;
+                                                            }
+                                                            
+                                                            return (
+                                                            <div key={comment.id} className="border-b pb-3 last:border-b-0">
+                                                                <div className="flex items-start gap-2">
+                                                                    <div 
+                                                                        className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0"
+                                                                        style={{ backgroundColor: comment.user?.color || '#808080' }}
+                                                                    >
+                                                                        {comment.user?.initials || '??'}
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                                            <span className="font-medium text-gray-700">
+                                                                                {comment.user?.username || 'Unknown'}
+                                                                            </span>
+                                                                            <span>•</span>
+                                                                            <span>{formatDate(comment.date)}</span>
+                                                                        </div>
+                                                                        <div className="mt-1 text-sm text-gray-900 break-words">
+                                                                            {comment.text || '[No comment text]'}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                    
+                                                    {hasMoreStepComments && (
+                                                        <div className="text-center pt-3">
+                                                            <button 
+                                                                onClick={loadMoreStepComments}
+                                                                disabled={loadingStepComments}
+                                                                className="text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                                                            >
+                                                                Load more comments
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="p-6 text-center text-gray-500">
+                                <p className="text-sm">Select a step to view details</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+                
+                {(!subtasks || subtasks.length === 0) && (
+                    <div className="bg-white border-t-2 border-gray-300">
+                        <div className="p-4 border-b border-gray-200">
+                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">📋 Step Details</h3>
+                        </div>
+                        <div className="p-6 text-center text-gray-500">
+                            <p>No steps available</p>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }
@@ -1668,12 +2004,17 @@
         return (
             <div className="min-h-screen bg-gray-100">
                 <div className="flex h-screen">
-                    {/* Left Panel - Main Task Context */}
+                    {/* Left Panel - Enhanced with Main Task Context and Step Details */}
                     <div className="w-80 flex-shrink-0">
-                        <MainTaskPanel mainTask={mainTask} />
+                        <MainTaskPanel 
+                            mainTask={mainTask} 
+                            subtasks={subtasks}
+                            selectedStepId={selectedStepId}
+                            onStepSelect={setSelectedStepId}
+                        />
                     </div>
                     
-                    {/* Main Content Area */}
+                    {/* Main Content Area - Now has more horizontal space */}
                     <div className="flex-1 overflow-y-auto">
                         <div className="bg-white shadow-lg">
                             {/* Header */}
@@ -1811,13 +2152,6 @@
                             </div>
                         </div>
                     </div>
-
-                    {/* Right Panel - Step Details */}
-                    <StepDetailsPanel 
-                        subtasks={subtasks}
-                        selectedStepId={selectedStepId}
-                        onStepSelect={setSelectedStepId}
-                    />
                 </div>
             </div>
         );
