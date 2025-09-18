@@ -188,6 +188,7 @@
         HUMAN_WAIT_OVERRIDE_INPUT: '7572d842-235f-4bb1-8fb0-8ad47ad1ec5a',
         WAIT_STATUS_EXECUTING: '833db1b3-8557-4a09-b5ed-5183f90e439b',
         LIBRARY_LEVEL: 'e49ccff6-f042-4e47-b452-0812ba128cfb',
+        PROCESS_POINTER: '56d8c645-1e50-421c-bb62-1e3ef1cff80f',
         // MCP Fields
         MCP_NAME: '5e2e416b-7ee8-4984-859b-c70c86c4d042',
         MCP_EXPECTED_ACTION: '56db1b14-75cb-42d9-bd38-45362d974516'
@@ -211,6 +212,16 @@
         if (!task || !task.custom_fields) return null;
         const field = task.custom_fields.find(f => f.id === fieldId);
         return field?.value || field?.value_richtext || null;
+    }
+    
+    // Helper to get Process Pointer linked task
+    function getProcessPointer(task) {
+        if (!task || !task.custom_fields) return null;
+        const field = task.custom_fields.find(f => f.id === FIELD_IDS.PROCESS_POINTER);
+        if (field?.value && Array.isArray(field.value) && field.value.length > 0) {
+            return field.value[0]; // Return first linked task
+        }
+        return null;
     }
 
     // Backend API Service
@@ -1535,6 +1546,41 @@
                         )}
                     </div>
                 </div>
+                
+                {/* Process Pointer Section - Shows linked Process Library */}
+                {getProcessPointer(mainTask) && (
+                    <div className="p-3 bg-blue-50 border-b border-blue-200">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
+                                    🔗 Process Pointer
+                                </span>
+                            </div>
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                            <span className="text-sm text-gray-700">
+                                {getProcessPointer(mainTask).name}
+                            </span>
+                            <a 
+                                href={getProcessPointer(mainTask).url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-800"
+                                title="Open in ClickUp"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                            </a>
+                        </div>
+                        {getProcessPointer(mainTask).status && (
+                            <div className="mt-1 text-xs text-gray-600">
+                                Status: {getProcessPointer(mainTask).status}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Section 2: Assignment & Timeline */}
                 <div className="p-4 bg-white border-b border-gray-200">
