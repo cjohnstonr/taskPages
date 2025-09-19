@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Relationship Field Display</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Mock the mainTask data structure with relationship fields
+    const mockMainTask = {
+        id: "868fkbrfv",
+        name: "Create Human Verification Form with Duplicate Details",
+        custom_id: "TICKET-69459",
+        status: {
+            status: "in progress",
+            color: "#d3d3d3"
+        },
+        custom_fields: [
+            // Empty relationship field (Process Pointer)
+            {
+                id: "56d8c645-1e50-421c-bb62-1e3ef1cff80f",
+                name: "Process Pointer",
+                type: "tasks",
+                value: null  // Empty
+            },
+            // Populated relationship field (Originating_Task_Id_Link)
+            {
+                id: "7a87799a-665b-48f8-b966-5e2a0013ef0a",
+                name: "Originating_Task_Id_Link",
+                type: "tasks",
+                value: [
+                    {
+                        id: "868f102hv",
+                        name: "Meeting: 8/1/2025 - OODA Host Meeting",
+                        status: "complete",
+                        color: "#008844",
+                        team_id: "9011954126",
+                        deleted: false,
+                        url: "https://app.clickup.com/t/868f102hv",
+                        access: true
+                    }
+                ]
+            },
+            // Another populated relationship field (property_link)
+            {
+                id: "73999194-0433-433d-a27c-4d9c5f194fd0",
+                name: "property_link",
+                type: "tasks",
+                value: [
+                    {
+                        id: "868ckygnk",
+                        name: "2369_vern",
+                        status: "to do",
+                        color: "#87909e",
+                        custom_type: 1002,
+                        team_id: "9011954126",
+                        deleted: false,
+                        url: "https://app.clickup.com/t/868ckygnk",
+                        access: true
+                    },
+                    {
+                        id: "868abc123",
+                        name: "1234_main_st",
+                        status: "in progress",
+                        color: "#428bf9",
+                        custom_type: 1002,
+                        team_id: "9011954126",
+                        deleted: false,
+                        url: "https://app.clickup.com/t/868abc123",
+                        access: true
+                    }
+                ]
+            }
+        ]
+    };
+
+    // Helper function for regular custom fields (existing)
+    function getCustomField(task, fieldId) {
+        if (!task || !task.custom_fields) return null;
+        const field = task.custom_fields.find(f => f.id === fieldId);
+        return field?.value || field?.value_richtext || null;
+    }
+
+    // NEW: Helper function for relationship fields
+    function getRelationshipField(task, fieldId) {
+        if (!task || !task.custom_fields) return [];
+        const field = task.custom_fields.find(f => f.id === fieldId);
+        
+        // Handle different possible structures
+        if (field && field.type === 'tasks') {
+            // Relationship fields with type 'tasks'
+            if (Array.isArray(field.value)) {
+                return field.value;
+            }
+            // Sometimes value might be null or undefined
+            return [];
+        }
+        
+        return [];
+    }
+
+    // Test Component
+    function RelationshipFieldTest() {
+        const processPointer = getRelationshipField(mockMainTask, "56d8c645-1e50-421c-bb62-1e3ef1cff80f");
+        const originatingTask = getRelationshipField(mockMainTask, "7a87799a-665b-48f8-b966-5e2a0013ef0a");
+        const propertyLinks = getRelationshipField(mockMainTask, "73999194-0433-433d-a27c-4d9c5f194fd0");
+
+        return (
+            <div className="p-8 max-w-4xl mx-auto">
+                <h1 className="text-2xl font-bold mb-6">Testing Relationship Field Display</h1>
+                
+                {/* Show raw data structure */}
+                <div className="mb-8 p-4 bg-gray-100 rounded">
+                    <h2 className="text-lg font-semibold mb-2">Raw Task Data:</h2>
+                    <p className="text-sm">Task Name: {mockMainTask.name}</p>
+                    <p className="text-sm">Task ID: {mockMainTask.custom_id}</p>
+                    <p className="text-sm">Custom Fields Count: {mockMainTask.custom_fields.length}</p>
+                </div>
+
+                {/* Test 1: Empty relationship field */}
+                <div className="mb-6 p-4 border rounded">
+                    <h3 className="font-semibold mb-2">Process Pointer (Empty Field):</h3>
+                    <p className="text-sm text-gray-600 mb-2">Field ID: 56d8c645-1e50-421c-bb62-1e3ef1cff80f</p>
+                    <p className="text-sm">Result: {processPointer.length === 0 ? '✅ Empty array (correct)' : '❌ Has data'}</p>
+                    <p className="text-sm">Length: {processPointer.length}</p>
+                </div>
+
+                {/* Test 2: Single item relationship */}
+                <div className="mb-6 p-4 border rounded">
+                    <h3 className="font-semibold mb-2">Originating Task (Single Item):</h3>
+                    <p className="text-sm text-gray-600 mb-2">Field ID: 7a87799a-665b-48f8-b966-5e2a0013ef0a</p>
+                    {originatingTask.length > 0 ? (
+                        <div className="space-y-2">
+                            {originatingTask.map((task) => (
+                                <div key={task.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                                    <div className="flex items-center space-x-2">
+                                        <div 
+                                            className="w-3 h-3 rounded-full" 
+                                            style={{backgroundColor: task.color || '#gray'}}
+                                        />
+                                        <a 
+                                            href={task.url}
+                                            target="_blank"
+                                            className="text-sm text-blue-600 hover:underline"
+                                        >
+                                            {task.name}
+                                        </a>
+                                    </div>
+                                    <span className="text-xs px-2 py-1 bg-gray-200 rounded">
+                                        {task.status}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-gray-500">No related tasks</p>
+                    )}
+                </div>
+
+                {/* Test 3: Multiple items relationship */}
+                <div className="mb-6 p-4 border rounded">
+                    <h3 className="font-semibold mb-2">Property Links (Multiple Items):</h3>
+                    <p className="text-sm text-gray-600 mb-2">Field ID: 73999194-0433-433d-a27c-4d9c5f194fd0</p>
+                    {propertyLinks.length > 0 ? (
+                        <div className="space-y-2">
+                            {propertyLinks.map((task) => (
+                                <div key={task.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                                    <div className="flex items-center space-x-2">
+                                        <div 
+                                            className="w-3 h-3 rounded-full" 
+                                            style={{backgroundColor: task.color || '#gray'}}
+                                        />
+                                        <a 
+                                            href={task.url}
+                                            target="_blank"
+                                            className="text-sm text-blue-600 hover:underline"
+                                        >
+                                            {task.name}
+                                        </a>
+                                    </div>
+                                    <span className="text-xs px-2 py-1 bg-gray-200 rounded">
+                                        {task.status}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-gray-500">No related tasks</p>
+                    )}
+                </div>
+
+                {/* How it would look in MainTaskPanel */}
+                <div className="mt-8 p-4 bg-white border-2 border-gray-200 rounded">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                        📎 Related Tasks
+                    </h3>
+                    {propertyLinks.length > 0 ? (
+                        <div className="space-y-1">
+                            {propertyLinks.map((task) => (
+                                <div key={task.id} className="flex items-center justify-between py-1">
+                                    <a 
+                                        href={task.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                                    >
+                                        <span className="text-xs">🔗</span>
+                                        {task.name.length > 30 ? task.name.substring(0, 30) + '...' : task.name}
+                                    </a>
+                                    <span 
+                                        className="text-xs px-1.5 py-0.5 rounded"
+                                        style={{
+                                            backgroundColor: `${task.color}20`,
+                                            color: task.color || '#666'
+                                        }}
+                                    >
+                                        {task.status}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-gray-400 italic">No related tasks</p>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // Render the app
+    ReactDOM.render(<RelationshipFieldTest />, document.getElementById('root'));
+</script>
+</body>
+</html>

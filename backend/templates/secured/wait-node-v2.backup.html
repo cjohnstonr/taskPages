@@ -176,7 +176,6 @@
     const FIELD_IDS = {
         WAIT_CONFIG: '993f6a27-54e9-4901-a846-20f87a8694b0',
         WAIT_STATUS: '02486fba-7ddc-49fa-a18e-7a772d23132a',
-        WAIT_TYPE: '77b043c6-309b-42ac-9d87-f887ea4419bb',
         AI_PROPOSED_ACTION: '6c4ca5f9-d9eb-453a-8058-2cdfe40b0ea0',
         AI_PROPOSED_VALUE: '3c28debd-e8ea-446b-b145-afd982ffe9ce',
         PROCESS_TEXT: 'b2587292-c1bc-4ee0-8dcb-a69db68d5fe8',
@@ -189,11 +188,6 @@
         HUMAN_WAIT_OVERRIDE_INPUT: '7572d842-235f-4bb1-8fb0-8ad47ad1ec5a',
         WAIT_STATUS_EXECUTING: '833db1b3-8557-4a09-b5ed-5183f90e439b',
         LIBRARY_LEVEL: 'e49ccff6-f042-4e47-b452-0812ba128cfb',
-        PROCESS_POINTER: '56d8c645-1e50-421c-bb62-1e3ef1cff80f',
-        // Process Library Fields
-        PROCESS_STATUS: '993c83d9-e1fe-443c-b608-7ba95f9a9bf4',
-        MCP_ACTION: '78ad4a0f-2cc3-4e12-8c30-0b19f20e9b87',
-        MCP_CLIENT: 'a99b51f4-eea9-476f-9fdf-91ee9e01c8d3',
         // MCP Fields
         MCP_NAME: '5e2e416b-7ee8-4984-859b-c70c86c4d042',
         MCP_EXPECTED_ACTION: '56db1b14-75cb-42d9-bd38-45362d974516'
@@ -217,110 +211,6 @@
         if (!task || !task.custom_fields) return null;
         const field = task.custom_fields.find(f => f.id === fieldId);
         return field?.value || field?.value_richtext || null;
-    }
-    
-    // Helper to get Process Pointer linked task
-    function getProcessPointer(task) {
-        if (!task || !task.custom_fields) return null;
-        const field = task.custom_fields.find(f => f.id === FIELD_IDS.PROCESS_POINTER);
-        if (field?.value && Array.isArray(field.value) && field.value.length > 0) {
-            return field.value[0]; // Return first linked task
-        }
-        return null;
-    }
-
-    // Helper to get dropdown field label from its value
-    function getDropdownLabel(field) {
-        if (!field || (!field.value && field.value !== 0)) return null;
-        
-        const options = field?.type_config?.options || [];
-        const selectedOption = options.find(opt => opt.orderindex === field.value);
-        return selectedOption?.name || `Option ${field.value}`;
-    }
-
-    // Helper to format custom field value based on type
-    function formatCustomFieldValue(field) {
-        if (!field || field.value === null || field.value === undefined || field.value === '') return null;
-        
-        switch(field.type) {
-            case 'checkbox':
-                return field.value ? '✅ Yes' : '❌ No';
-            
-            case 'drop_down':
-                return getDropdownLabel(field) || 'Unknown';
-            
-            case 'text':
-            case 'short_text':
-                // Truncate long text
-                const text = String(field.value);
-                return text.length > 100 ? text.substring(0, 100) + '...' : text;
-            
-            case 'number':
-                return String(field.value);
-            
-            case 'date':
-                return field.value ? new Date(field.value).toLocaleDateString() : 'No date';
-            
-            case 'tasks':
-                // Task relationship field
-                if (Array.isArray(field.value) && field.value.length > 0) {
-                    return field.value.map(t => t.name || t.id).join(', ');
-                }
-                return 'No linked tasks';
-            
-            default:
-                return String(field.value);
-        }
-    }
-
-    // Helper to get relevant custom fields for display
-    function getRelevantCustomFields(step) {
-        if (!step || !step.custom_fields) return { processLibrary: [], waitNode: [] };
-        
-        // Process Library field IDs
-        const processLibraryFieldIds = [
-            FIELD_IDS.EXECUTED,
-            FIELD_IDS.LIBRARY_LEVEL,
-            FIELD_IDS.MCP_ACTION,
-            FIELD_IDS.MCP_CLIENT,
-            FIELD_IDS.PROCESS_STATUS,
-            FIELD_IDS.STEP_INSIGHTS
-            // STEP_NUMBER and PROCESS_TEXT are shown elsewhere
-        ];
-        
-        // Wait Node specific field IDs
-        const waitNodeFieldIds = [
-            FIELD_IDS.AI_PROPOSED_ACTION,
-            FIELD_IDS.AI_PROPOSED_VALUE,
-            FIELD_IDS.HUMAN_APPROVED_ACTION,
-            FIELD_IDS.HUMAN_APPROVED_VALUE,
-            FIELD_IDS.WAIT_CONFIG,
-            FIELD_IDS.WAIT_STATUS,
-            FIELD_IDS.WAIT_TYPE
-        ];
-        
-        // Get Process Library fields
-        const processLibraryFields = [];
-        processLibraryFieldIds.forEach(fieldId => {
-            const field = step.custom_fields.find(f => f.id === fieldId);
-            if (field && formatCustomFieldValue(field) !== null) {
-                processLibraryFields.push(field);
-            }
-        });
-        
-        // Get Wait Node fields (only if they have values)
-        const waitNodeFields = [];
-        waitNodeFieldIds.forEach(fieldId => {
-            const field = step.custom_fields.find(f => f.id === fieldId);
-            if (field && formatCustomFieldValue(field) !== null) {
-                waitNodeFields.push(field);
-            }
-        });
-        
-        return {
-            processLibrary: processLibraryFields,
-            waitNode: waitNodeFields
-        };
     }
 
     // Backend API Service
@@ -482,7 +372,7 @@
                                     }`}
                                 >
                                     <div className="flex items-center justify-between">
-                                        <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                        <div className="flex items-center space-x-3">
                                                 <span className={`text-lg ${executed ? 'text-emerald-600' : 'text-gray-400'}`}>
                                                     {executed ? '✅' : libraryLevel === 'Wait' ? '⏳' : '❌'}
                                                 </span>
@@ -501,13 +391,8 @@
                                                     {subtask.custom_id}
                                                 </a>
                                             )}
-                                            {stepName && (
-                                                <span className="text-sm text-gray-700 truncate" title={stepName}>
-                                                    {stepName}
-                                                </span>
-                                            )}
                                         </div>
-                                        <div className="flex items-center space-x-2 flex-shrink-0">
+                                        <div className="flex items-center space-x-2">
                                             {hasContent && (
                                                 <span
                                                     className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
@@ -1150,297 +1035,19 @@
         );
     }
 
-    // Resize Handle Component for panel resizing
-    function ResizeHandle({ onMouseDown, onDoubleClick, isResizing }) {
-        const [isHovered, setIsHovered] = useState(false);
-        
-        return (
-            <div 
-                className={`
-                    relative flex items-center justify-center
-                    bg-gray-300 
-                    cursor-col-resize 
-                    transition-all duration-150
-                    ${isResizing ? 'w-2 bg-blue-500 shadow-lg' : 'w-1 hover:w-2 hover:bg-blue-500 hover:shadow-lg'}
-                `}
-                onMouseDown={onMouseDown}
-                onDoubleClick={onDoubleClick}
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
-                style={{ 
-                    userSelect: 'none',
-                    touchAction: 'none'
-                }}
-                title="Drag to resize panel • Double-click to reset"
-            >
-                {/* Grip indicator - visible on hover or during resize */}
-                <div className="absolute inset-y-0 flex items-center pointer-events-none">
-                    <div className={`space-y-1 transition-opacity ${(isResizing || isHovered) ? 'opacity-100' : 'opacity-0'}`}>
-                        <div className="w-1 h-1 bg-white rounded-full"></div>
-                        <div className="w-1 h-1 bg-white rounded-full"></div>
-                        <div className="w-1 h-1 bg-white rounded-full"></div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-    
-    // Parent Task Section Component - Shows the actual parent task details
-    function ParentTaskSection({ parentTask }) {
-        const [comments, setComments] = useState([]);
-        const [loadingComments, setLoadingComments] = useState(false);
-        const [expandedComments, setExpandedComments] = useState(false);
-        const [hasMoreComments, setHasMoreComments] = useState(false);
-        const [expandedDetails, setExpandedDetails] = useState(false);
-        
-        if (!parentTask) return null;
-        
-        // Load parent task comments
-        const loadComments = async () => {
-            setLoadingComments(true);
-            try {
-                const response = await fetch(`${BACKEND_URL}/api/task/${parentTask.id}/comments?limit=5`, {
-                    credentials: 'include',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    }
-                });
-                
-                if (response.status === 401) {
-                    window.location.href = '/auth/login';
-                    return;
-                }
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    setComments(data.comments || []);
-                    setHasMoreComments(data.has_more || false);
-                }
-            } catch (error) {
-                console.error('Error loading parent task comments:', error);
-            } finally {
-                setLoadingComments(false);
-            }
-        };
-        
-        const loadMoreComments = async () => {
-            if (loadingComments) return;
-            setLoadingComments(true);
-            
-            try {
-                const response = await fetch(`${BACKEND_URL}/api/task/${parentTask.id}/comments?start=${comments.length}&limit=5`, {
-                    credentials: 'include',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    }
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    setComments(prev => [...prev, ...(data.comments || [])]);
-                    setHasMoreComments(data.has_more || false);
-                }
-            } catch (error) {
-                console.error('Error loading more parent comments:', error);
-            } finally {
-                setLoadingComments(false);
-            }
-        };
-        
-        // Format date helper
-        const formatDate = (timestamp) => {
-            if (!timestamp) return 'Not set';
-            const date = new Date(parseInt(timestamp));
-            return date.toLocaleDateString('en-US', { 
-                month: 'short', 
-                day: 'numeric', 
-                year: 'numeric' 
-            });
-        };
-        
-        return (
-            <div className="bg-white border-b-4 border-gray-300">
-                {/* Parent Task Header */}
-                <div className="p-4 bg-blue-50 border-b border-blue-200">
-                    <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
-                            🏢 Parent Task
-                        </h3>
-                        {parentTask.custom_id && (
-                            <a
-                                href={`https://app.clickup.com/t/${parentTask.id}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-mono"
-                                title="Open in ClickUp"
-                            >
-                                {parentTask.custom_id}
-                            </a>
-                        )}
-                    </div>
-                    <h2 className="text-lg font-semibold text-gray-900 mb-2">{parentTask.name}</h2>
-                    
-                    {/* Parent task basic info */}
-                    <div className="flex items-center space-x-4 text-xs">
-                        {parentTask.status && (
-                            <div className="flex items-center">
-                                <span
-                                    className="inline-block w-2 h-2 rounded-full mr-1"
-                                    style={{ backgroundColor: parentTask.status.color || '#6b7280' }}
-                                ></span>
-                                <span className="text-gray-600">{parentTask.status.status}</span>
-                            </div>
-                        )}
-                        {parentTask.due_date && (
-                            <div className="text-gray-600">
-                                Due: {formatDate(parentTask.due_date)}
-                            </div>
-                        )}
-                        {parentTask.assignees && parentTask.assignees.length > 0 && (
-                            <div className="text-gray-600">
-                                👤 {parentTask.assignees.map(a => a.username).join(', ')}
-                            </div>
-                        )}
-                    </div>
-                </div>
-                
-                {/* Parent Task Details - Collapsible */}
-                {parentTask.description && (
-                    <div className="border-b border-gray-200">
-                        <div
-                            onClick={() => setExpandedDetails(!expandedDetails)}
-                            className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
-                        >
-                            <div className="flex items-center justify-between">
-                                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                    Description
-                                </h4>
-                                <span className={`text-gray-400 transition-transform duration-200 ${
-                                    expandedDetails ? 'rotate-180' : ''
-                                }`}>
-                                    ▼
-                                </span>
-                            </div>
-                        </div>
-                        
-                        <div className={`accordion-content ${expandedDetails ? 'show' : ''}`}>
-                            {expandedDetails && (
-                                <div className="px-4 pb-4">
-                                    <div className="prose prose-sm max-w-none text-gray-700"
-                                        dangerouslySetInnerHTML={{ __html: renderMarkdown(parentTask.description) }}
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-                
-                {/* Parent Task Comments - Collapsible */}
-                <div className="border-b border-gray-200">
-                    <div
-                        onClick={() => {
-                            setExpandedComments(!expandedComments);
-                            if (!expandedComments && comments.length === 0) {
-                                loadComments();
-                            }
-                        }}
-                        className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
-                    >
-                        <div className="flex items-center justify-between">
-                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                💬 Parent Comments
-                            </h4>
-                            <span className={`text-gray-400 transition-transform duration-200 ${
-                                expandedComments ? 'rotate-180' : ''
-                            }`}>
-                                ▼
-                            </span>
-                        </div>
-                    </div>
-                    
-                    <div className={`accordion-content ${expandedComments ? 'show' : ''}`}>
-                        {expandedComments && (
-                            <div className="px-4 pb-4 max-h-80 overflow-y-auto">
-                                {loadingComments && comments.length === 0 ? (
-                                    <div className="text-center py-4">
-                                        <div className="spinner-sm mx-auto"></div>
-                                        <p className="text-xs text-gray-500 mt-2">Loading comments...</p>
-                                    </div>
-                                ) : comments.length === 0 ? (
-                                    <p className="text-xs text-gray-500 text-center py-4">No comments yet</p>
-                                ) : (
-                                    <>
-                                        {comments.map((comment, idx) => (
-                                            <div key={comment.id || idx} className="mb-3 pb-3 border-b border-gray-100 last:border-0">
-                                                <div className="flex items-start space-x-2">
-                                                    <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-white text-xs"
-                                                        style={{ backgroundColor: comment.user?.color || '#6b7280' }}>
-                                                        {comment.user?.initials || '??'}
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex items-center space-x-2 mb-1">
-                                                            <span className="text-xs font-medium text-gray-700">
-                                                                {comment.user?.username || 'Unknown'}
-                                                            </span>
-                                                            <span className="text-xs text-gray-500">
-                                                                {comment.date_formatted || 'No date'}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-xs text-gray-600 break-words">
-                                                            {comment.text || ''}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        
-                                        {hasMoreComments && (
-                                            <div className="text-center pt-2">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        loadMoreComments();
-                                                    }}
-                                                    disabled={loadingComments}
-                                                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50"
-                                                >
-                                                    {loadingComments ? 'Loading...' : 'Load more'}
-                                                </button>
-                                            </div>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // Enhanced Left Panel Component with Main Task and Step Details
-    function MainTaskPanel({ parentTask, mainTask, subtasks, selectedStepId, onStepSelect, panelWidth }) {
-        if (!mainTask) return null;
-        
-        // Width-based responsive adjustments
-        const isNarrow = panelWidth && panelWidth < 300;
-        const isWide = panelWidth && panelWidth > 450;
-        
-        // Step Details state management
+    // Step Details Panel Component (Right Panel)
+    function StepDetailsPanel({ subtasks, selectedStepId, onStepSelect }) {
         const [selectedStep, setSelectedStep] = useState(null);
         const [stepComments, setStepComments] = useState([]);
-        const [loadingStepComments, setLoadingStepComments] = useState(false);
-        const [hasMoreStepComments, setHasMoreStepComments] = useState(false);
-        const [stepSectionsExpanded, setStepSectionsExpanded] = useState({
-            description: false,
-            customFields: true,  // New section - default expanded
-            processText: true,
-            mcpInfo: true,
-            comments: true
+        const [loadingComments, setLoadingComments] = useState(false);
+        const [hasMoreComments, setHasMoreComments] = useState(false);
+        const [sectionsExpanded, setSectionsExpanded] = useState({
+            description: false,    // Collapsed by default
+            processText: true,     // Expanded by default  
+            mcpInfo: true,         // Expanded by default
+            comments: true         // Expanded by default
         });
-        
+
         // Update selected step when selection changes
         useEffect(() => {
             if (selectedStepId && subtasks) {
@@ -1451,17 +1058,18 @@
                 }
             }
         }, [selectedStepId, subtasks]);
-        
+
         const loadStepComments = async (stepId) => {
             console.log('🔍 [STEP COMMENTS] loadStepComments called for stepId:', stepId);
             
-            setLoadingStepComments(true);
+            setLoadingComments(true);
             try {
                 const commentsUrl = `${BACKEND_URL}/api/task/${stepId}/comments?limit=5`;
                 console.log('🔍 [STEP COMMENTS] API URL:', commentsUrl);
                 
+                // Use session cookie authentication, not localStorage token
                 const response = await fetch(commentsUrl, {
-                    credentials: 'include',
+                    credentials: 'include',  // Include session cookie
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
@@ -1469,70 +1077,292 @@
                 });
                 
                 console.log('🔍 [STEP COMMENTS] Response status:', response.status);
+                console.log('🔍 [STEP COMMENTS] Response ok:', response.ok);
                 
                 if (response.status === 401) {
                     console.warn('⚠️ [STEP COMMENTS] 401 Unauthorized, redirecting to login');
+                    // Not authenticated, redirect to login
                     window.location.href = '/auth/login';
                     return;
                 }
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('🔍 [STEP COMMENTS] Response data:', data);
+                    console.log('🔍 [STEP COMMENTS] Comments array:', data.comments);
                     console.log('🔍 [STEP COMMENTS] Comments count:', data.comments?.length || 0);
+                    console.log('🔍 [STEP COMMENTS] Has more:', data.has_more);
                     setStepComments(data.comments || []);
-                    setHasMoreStepComments(data.has_more || false);
+                    setHasMoreComments(data.has_more || false);
                 } else {
                     const errorText = await response.text();
-                    console.error('❌ [STEP COMMENTS] Failed to fetch comments:', response.status, errorText);
+                    console.error('❌ [STEP COMMENTS] Failed to fetch comments:', response.status, response.statusText);
+                    console.error('❌ [STEP COMMENTS] Error response body:', errorText);
                 }
             } catch (error) {
                 console.error('❌ [STEP COMMENTS] Error loading step comments:', error);
                 setStepComments([]);
             } finally {
-                setLoadingStepComments(false);
+                setLoadingComments(false);
             }
         };
-        
+
         const loadMoreStepComments = async () => {
-            if (!selectedStep || loadingStepComments) return;
+            if (!selectedStep || loadingComments) return;
             
-            setLoadingStepComments(true);
+            setLoadingComments(true);
             try {
+                // Use session cookie authentication, not localStorage token
                 const response = await fetch(`${BACKEND_URL}/api/task/${selectedStep.id}/comments?start=${stepComments.length}&limit=5`, {
-                    credentials: 'include',
+                    credentials: 'include',  // Include session cookie
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     }
                 });
                 if (response.status === 401) {
+                    // Not authenticated, redirect to login
                     window.location.href = '/auth/login';
                     return;
                 }
                 if (response.ok) {
                     const data = await response.json();
                     setStepComments(prev => [...prev, ...(data.comments || [])]);
-                    setHasMoreStepComments(data.has_more || false);
+                    setHasMoreComments(data.has_more || false);
                 }
             } catch (error) {
                 console.error('Error loading more step comments:', error);
             } finally {
-                setLoadingStepComments(false);
+                setLoadingComments(false);
             }
         };
-        
-        const toggleStepSection = (section) => {
-            setStepSectionsExpanded(prev => ({
+
+        const toggleSection = (section) => {
+            setSectionsExpanded(prev => ({
                 ...prev,
                 [section]: !prev[section]
             }));
         };
-        
+
         const handleStepChange = (e) => {
             const stepId = e.target.value;
             if (stepId && onStepSelect) {
                 onStepSelect(stepId);
             }
         };
+
+        if (!subtasks || subtasks.length === 0) {
+            return (
+                <div className="w-96 bg-gray-50 shadow-xl h-full overflow-y-auto border-l border-gray-200">
+                    <div className="bg-white border-b border-gray-200 p-4">
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">📋 Step Details</h3>
+                    </div>
+                    <div className="p-6 text-center text-gray-500">
+                        <p>No steps available</p>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="w-96 bg-gray-50 shadow-xl h-full overflow-y-auto border-l border-gray-200">
+                {/* Header */}
+                <div className="bg-white border-b border-gray-200 p-4">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">📋 Step Details</h3>
+                    
+                    {/* Step Selector Dropdown */}
+                    <select 
+                        value={selectedStep?.id || ''}
+                        onChange={handleStepChange}
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="" className="text-gray-800">Select a step...</option>
+                        {subtasks.map((step) => {
+                            const stepNumber = getCustomField(step, FIELD_IDS.STEP_NUMBER) || '?';
+                            return (
+                                <option key={step.id} value={step.id} className="text-gray-800">
+                                    Step {stepNumber}: {step.name}
+                                </option>
+                            );
+                        })}
+                    </select>
+                </div>
+
+                {selectedStep ? (
+                    <div className="p-4 space-y-4">
+                        {/* Step Info */}
+                        <div className="bg-white border-b border-gray-200 p-4">
+                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Current Step</h4>
+                            <div className="font-semibold text-gray-900">
+                                Step {getCustomField(selectedStep, FIELD_IDS.STEP_NUMBER) || '?'} - {selectedStep.name}
+                            </div>
+                        </div>
+
+                        {/* Task Description Section */}
+                        {selectedStep.description && (
+                            <div className="bg-white border-b border-gray-200">
+                                <div 
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                    onClick={() => toggleSection('description')}
+                                >
+                                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">📝 Task Description</span>
+                                    <span className="text-gray-400">
+                                        {sectionsExpanded.description ? '▼' : '▶'}
+                                    </span>
+                                </div>
+                                {sectionsExpanded.description && (
+                                    <div className="p-4 prose prose-sm max-w-none">
+                                        <div dangerouslySetInnerHTML={{
+                                            __html: DOMPurify.sanitize(marked.parse(selectedStep.description))
+                                        }} />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Process Text Section */}
+                        {getCustomField(selectedStep, FIELD_IDS.PROCESS_TEXT) && (
+                            <div className="bg-white border-b border-gray-200">
+                                <div 
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                    onClick={() => toggleSection('processText')}
+                                >
+                                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">🔧 Process Text</span>
+                                    <span className="text-gray-400">
+                                        {sectionsExpanded.processText ? '▼' : '▶'}
+                                    </span>
+                                </div>
+                                {sectionsExpanded.processText && (
+                                    <div className="p-4 prose prose-sm max-w-none">
+                                        <div dangerouslySetInnerHTML={{
+                                            __html: DOMPurify.sanitize(marked.parse(getCustomField(selectedStep, FIELD_IDS.PROCESS_TEXT)))
+                                        }} />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* MCP Information Section */}
+                        {(getCustomField(selectedStep, FIELD_IDS.MCP_NAME) || getCustomField(selectedStep, FIELD_IDS.MCP_EXPECTED_ACTION)) && (
+                            <div className="bg-white border-b border-gray-200">
+                                <div 
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                    onClick={() => toggleSection('mcpInfo')}
+                                >
+                                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">🤖 MCP Information</span>
+                                    <span className="text-gray-400">
+                                        {sectionsExpanded.mcpInfo ? '▼' : '▶'}
+                                    </span>
+                                </div>
+                                {sectionsExpanded.mcpInfo && (
+                                    <div className="p-4 space-y-2">
+                                        <div>
+                                            <span className="text-sm font-medium text-gray-500">Client/Tool:</span>{' '}
+                                            <span className="text-sm text-gray-900">
+                                                {getCustomField(selectedStep, FIELD_IDS.MCP_NAME) || 'Not specified'}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className="text-sm font-medium text-gray-500">Action:</span>{' '}
+                                            <span className="text-sm text-gray-900">
+                                                {getCustomField(selectedStep, FIELD_IDS.MCP_EXPECTED_ACTION) || 'Not specified'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Step Comments Section */}
+                        <div className="bg-white border-b border-gray-200">
+                            <div 
+                                className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                onClick={() => toggleSection('comments')}
+                            >
+                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                    💬 Step Comments
+                                    {stepComments.length > 0 && (
+                                        <span className="ml-2 bg-gray-600 text-white text-xs px-2 py-0.5 rounded-full">
+                                            {stepComments.length}
+                                        </span>
+                                    )}
+                                </span>
+                                <span className="text-gray-400">
+                                    {sectionsExpanded.comments ? '▼' : '▶'}
+                                </span>
+                            </div>
+                            {sectionsExpanded.comments && (
+                                <div className="p-4">
+                                    {(() => {
+                                        console.log('🔍 [STEP COMMENTS RENDER] Rendering step comments section');
+                                        console.log('🔍 [STEP COMMENTS RENDER] loadingComments:', loadingComments);
+                                        console.log('🔍 [STEP COMMENTS RENDER] stepComments:', stepComments);
+                                        console.log('🔍 [STEP COMMENTS RENDER] stepComments.length:', stepComments.length);
+                                        console.log('🔍 [STEP COMMENTS RENDER] selectedStep:', selectedStep);
+                                        console.log('🔍 [STEP COMMENTS RENDER] sectionsExpanded.comments:', sectionsExpanded.comments);
+                                        return null;
+                                    })()}
+                                    {loadingComments && stepComments.length === 0 ? (
+                                        <p className="text-gray-500 text-sm">Loading comments...</p>
+                                    ) : stepComments.length === 0 ? (
+                                        <p className="text-gray-500 text-sm">No comments for this step</p>
+                                    ) : (
+                                        <>
+                                            <div className="space-y-3">
+                                                {stepComments.map((comment) => (
+                                                    <div key={comment.id} className="border-b pb-3 last:border-b-0">
+                                                        <div className="flex items-start gap-2">
+                                                            <div 
+                                                                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0"
+                                                                style={{ backgroundColor: comment.user?.color || '#808080' }}
+                                                            >
+                                                                {comment.user?.initials || '??'}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                                    <span className="font-medium text-gray-700">
+                                                                        {comment.user?.username || 'Unknown'}
+                                                                    </span>
+                                                                    <span>•</span>
+                                                                    <span>{comment.date_formatted}</span>
+                                                                </div>
+                                                                <div className="mt-1 text-sm text-gray-900 break-words">
+                                                                    {comment.text}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {hasMoreComments && (
+                                                <div className="text-center pt-3">
+                                                    <button 
+                                                        onClick={loadMoreStepComments}
+                                                        disabled={loadingComments}
+                                                        className="text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                                                    >
+                                                        {loadingComments ? 'Loading...' : 'Load More Comments'}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-white border-b border-gray-200 p-6 text-center text-gray-500">
+                        <p>Select a step to view details</p>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // Left Panel Component for Main Task
+    function MainTaskPanel({ mainTask }) {
+        if (!mainTask) return null;
 
         // Format date
         const formatDate = (timestamp) => {
@@ -1584,13 +1414,10 @@
 
         return (
             <div className="h-full bg-gray-50 border-r border-gray-200 overflow-y-auto">
-                {/* Parent Task Section - Shows the actual parent */}
-                <ParentTaskSection parentTask={parentTask} />
-                
-                {/* Section 1: Task Overview - Process Library Task */}
+                {/* Section 1: Task Overview */}
                 <div className="p-4 bg-white border-b border-gray-200">
                     <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                        🔧 Process Library Task
+                        Main Task Context
                     </h3>
                     
                     <div className="space-y-3">
@@ -1646,41 +1473,6 @@
                         )}
                     </div>
                 </div>
-                
-                {/* Process Pointer Section - Shows linked Process Library */}
-                {getProcessPointer(mainTask) && (
-                    <div className="p-3 bg-blue-50 border-b border-blue-200">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
-                                    🔗 Process Pointer
-                                </span>
-                            </div>
-                        </div>
-                        <div className="mt-2 flex items-center gap-2">
-                            <span className="text-sm text-gray-700">
-                                {getProcessPointer(mainTask).name}
-                            </span>
-                            <a 
-                                href={getProcessPointer(mainTask).url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-800"
-                                title="Open in ClickUp"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                </svg>
-                            </a>
-                        </div>
-                        {getProcessPointer(mainTask).status && (
-                            <div className="mt-1 text-xs text-gray-600">
-                                Status: {getProcessPointer(mainTask).status}
-                            </div>
-                        )}
-                    </div>
-                )}
 
                 {/* Section 2: Assignment & Timeline */}
                 <div className="p-4 bg-white border-b border-gray-200">
@@ -1784,310 +1576,6 @@
 
                 {/* Section 4: Recent Activity */}
                 <CommentsSection mainTask={mainTask} />
-                
-                {/* Thick divider between Process Library and Step Details */}
-                <div className="border-b-4 border-gray-300"></div>
-                
-                {/* Section 5: Step Details - Moved from right panel */}
-                {subtasks && subtasks.length > 0 && (
-                    <div className="bg-white">
-                        {/* Step Details Header */}
-                        <div className="p-4 bg-white border-b border-gray-200">
-                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                                📋 Step Details
-                            </h3>
-                            
-                            {/* Step Selector Dropdown - adjusted for narrower width */}
-                            <select 
-                                value={selectedStep?.id || ''}
-                                onChange={handleStepChange}
-                                className="w-full px-2 py-1.5 text-sm bg-white border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                                <option value="" className="text-gray-800">Select a step...</option>
-                                {subtasks.map((step) => {
-                                    const stepNumber = getCustomField(step, FIELD_IDS.STEP_NUMBER) || '?';
-                                    const stepName = step.name?.length > 30 ? step.name.substring(0, 30) + '...' : step.name;
-                                    return (
-                                        <option key={step.id} value={step.id} className="text-gray-800">
-                                            Step {stepNumber}: {stepName}
-                                        </option>
-                                    );
-                                })}
-                            </select>
-                        </div>
-                        
-                        {/* Step Details Content */}
-                        {selectedStep ? (
-                            <div>
-                                {/* Step Info */}
-                                <div className="p-4 bg-white border-b border-gray-200">
-                                    <div className="space-y-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-gray-500">Step:</span>
-                                            <span className="text-sm font-medium text-gray-900">{selectedStep.name}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-gray-500">Status:</span>
-                                            <span className="text-sm text-gray-700">{selectedStep.status?.status || 'Unknown'}</span>
-                                        </div>
-                                        {selectedStep.custom_id && (
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs text-gray-500">ID:</span>
-                                                <a
-                                                    href={`https://app.clickup.com/t/${selectedStep.id}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-sm text-blue-600 hover:text-blue-800 font-mono"
-                                                >
-                                                    {selectedStep.custom_id}
-                                                </a>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                                
-                                {/* Custom Fields Section */}
-                                {(() => {
-                                    const customFields = getRelevantCustomFields(selectedStep);
-                                    const hasCustomFields = customFields.processLibrary.length > 0 || customFields.waitNode.length > 0;
-                                    
-                                    if (!hasCustomFields) return null;
-                                    
-                                    return (
-                                        <div className="bg-white border-b border-gray-200">
-                                            <div 
-                                                className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                                onClick={() => toggleStepSection('customFields')}
-                                            >
-                                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                                    📊 Custom Fields {customFields.waitNode.length > 0 && '(Wait Node)'}
-                                                </span>
-                                                <span className="text-gray-400">
-                                                    {stepSectionsExpanded.customFields ? '▼' : '▶'}
-                                                </span>
-                                            </div>
-                                            {stepSectionsExpanded.customFields && (
-                                                <div className="p-4 space-y-4">
-                                                    {/* Process Library Fields */}
-                                                    {customFields.processLibrary.length > 0 && (
-                                                        <div>
-                                                            <h4 className="text-xs font-medium text-gray-600 mb-2">Process Library Fields</h4>
-                                                            <div className="grid grid-cols-1 gap-2">
-                                                                {customFields.processLibrary.map(field => (
-                                                                    <div key={field.id} className="flex items-start gap-2 text-sm">
-                                                                        <span className="text-gray-600 font-medium min-w-[120px]">
-                                                                            {field.name}:
-                                                                        </span>
-                                                                        <span className="text-gray-800 break-words flex-1">
-                                                                            {formatCustomFieldValue(field)}
-                                                                        </span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    
-                                                    {/* Wait Node Fields */}
-                                                    {customFields.waitNode.length > 0 && (
-                                                        <div>
-                                                            <h4 className="text-xs font-medium text-amber-600 mb-2">Wait Node Specific Fields</h4>
-                                                            <div className="grid grid-cols-1 gap-2">
-                                                                {customFields.waitNode.map(field => {
-                                                                    // Special handling for longer text fields
-                                                                    const isLongText = field.type === 'text' && field.value && field.value.length > 100;
-                                                                    
-                                                                    return (
-                                                                        <div key={field.id} className={`${isLongText ? 'block' : 'flex items-start gap-2'} text-sm`}>
-                                                                            <span className="text-amber-700 font-medium min-w-[120px]">
-                                                                                {field.name}:
-                                                                            </span>
-                                                                            {isLongText ? (
-                                                                                <div className="mt-1 p-2 bg-amber-50 rounded text-gray-800 text-xs font-mono whitespace-pre-wrap break-words">
-                                                                                    {field.value}
-                                                                                </div>
-                                                                            ) : (
-                                                                                <span className="text-gray-800 break-words flex-1">
-                                                                                    {formatCustomFieldValue(field)}
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })()}
-                                
-                                {/* Step Description Section */}
-                                {selectedStep.description && (
-                                    <div className="bg-white border-b border-gray-200">
-                                        <div 
-                                            className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                            onClick={() => toggleStepSection('description')}
-                                        >
-                                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">📝 Description</span>
-                                            <span className="text-gray-400">
-                                                {stepSectionsExpanded.description ? '▼' : '▶'}
-                                            </span>
-                                        </div>
-                                        {stepSectionsExpanded.description && (
-                                            <div className="p-4 prose prose-sm max-w-none">
-                                                <div dangerouslySetInnerHTML={{
-                                                    __html: DOMPurify.sanitize(marked.parse(selectedStep.description))
-                                                }} />
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                                
-                                {/* Process Text Section */}
-                                {getCustomField(selectedStep, FIELD_IDS.PROCESS_TEXT) && (
-                                    <div className="bg-white border-b border-gray-200">
-                                        <div 
-                                            className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                            onClick={() => toggleStepSection('processText')}
-                                        >
-                                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">🔧 Process Text</span>
-                                            <span className="text-gray-400">
-                                                {stepSectionsExpanded.processText ? '▼' : '▶'}
-                                            </span>
-                                        </div>
-                                        {stepSectionsExpanded.processText && (
-                                            <div className="p-4 prose prose-sm max-w-none">
-                                                <div dangerouslySetInnerHTML={{
-                                                    __html: DOMPurify.sanitize(marked.parse(getCustomField(selectedStep, FIELD_IDS.PROCESS_TEXT)))
-                                                }} />
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                                
-                                {/* MCP Information Section */}
-                                {(getCustomField(selectedStep, FIELD_IDS.MCP_NAME) || getCustomField(selectedStep, FIELD_IDS.MCP_EXPECTED_ACTION)) && (
-                                    <div className="bg-white border-b border-gray-200">
-                                        <div 
-                                            className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                            onClick={() => toggleStepSection('mcpInfo')}
-                                        >
-                                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">🤖 MCP Information</span>
-                                            <span className="text-gray-400">
-                                                {stepSectionsExpanded.mcpInfo ? '▼' : '▶'}
-                                            </span>
-                                        </div>
-                                        {stepSectionsExpanded.mcpInfo && (
-                                            <div className="p-4 space-y-3">
-                                                {getCustomField(selectedStep, FIELD_IDS.MCP_NAME) && (
-                                                    <div>
-                                                        <span className="text-xs text-gray-500">MCP Name:</span>
-                                                        <p className="text-sm font-medium text-gray-900">{getCustomField(selectedStep, FIELD_IDS.MCP_NAME)}</p>
-                                                    </div>
-                                                )}
-                                                {getCustomField(selectedStep, FIELD_IDS.MCP_EXPECTED_ACTION) && (
-                                                    <div>
-                                                        <span className="text-xs text-gray-500">Expected Action:</span>
-                                                        <p className="text-sm text-gray-700">{getCustomField(selectedStep, FIELD_IDS.MCP_EXPECTED_ACTION)}</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                                
-                                {/* Step Comments Section */}
-                                <div className="bg-white border-b border-gray-200">
-                                    <div 
-                                        className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                        onClick={() => toggleStepSection('comments')}
-                                    >
-                                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                            💬 Comments {stepComments.length > 0 && `(${stepComments.length})`}
-                                        </span>
-                                        <span className="text-gray-400">
-                                            {stepSectionsExpanded.comments ? '▼' : '▶'}
-                                        </span>
-                                    </div>
-                                    
-                                    {stepSectionsExpanded.comments && (
-                                        <div className="p-4">
-                                            {loadingStepComments && stepComments.length === 0 ? (
-                                                <p className="text-gray-500 text-sm">Loading comments...</p>
-                                            ) : stepComments.length === 0 ? (
-                                                <p className="text-gray-500 text-sm">No comments for this step</p>
-                                            ) : (
-                                                <>
-                                                    <div className="space-y-3">
-                                                        {stepComments.map((comment) => {
-                                                            // Graceful degradation for malformed step comments
-                                                            if (!comment || !comment.id) {
-                                                                return null;
-                                                            }
-                                                            
-                                                            return (
-                                                            <div key={comment.id} className="border-b pb-3 last:border-b-0">
-                                                                <div className="flex items-start gap-2">
-                                                                    <div 
-                                                                        className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0"
-                                                                        style={{ backgroundColor: comment.user?.color || '#808080' }}
-                                                                    >
-                                                                        {comment.user?.initials || '??'}
-                                                                    </div>
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                                            <span className="font-medium text-gray-700">
-                                                                                {comment.user?.username || 'Unknown'}
-                                                                            </span>
-                                                                            <span>•</span>
-                                                                            <span>{formatDate(comment.date)}</span>
-                                                                        </div>
-                                                                        <div className="mt-1 text-sm text-gray-900 break-words">
-                                                                            {comment.text || '[No comment text]'}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                    
-                                                    {hasMoreStepComments && (
-                                                        <div className="text-center pt-3">
-                                                            <button 
-                                                                onClick={loadMoreStepComments}
-                                                                disabled={loadingStepComments}
-                                                                className="text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50"
-                                                            >
-                                                                Load more comments
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="p-6 text-center text-gray-500">
-                                <p className="text-sm">Select a step to view details</p>
-                            </div>
-                        )}
-                    </div>
-                )}
-                
-                {(!subtasks || subtasks.length === 0) && (
-                    <div className="bg-white border-t-2 border-gray-300">
-                        <div className="p-4 border-b border-gray-200">
-                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">📋 Step Details</h3>
-                        </div>
-                        <div className="p-6 text-center text-gray-500">
-                            <p>No steps available</p>
-                        </div>
-                    </div>
-                )}
             </div>
         );
     }
@@ -2102,95 +1590,10 @@
         const [subtasks, setSubtasks] = useState([]);
         const [expandedContext, setExpandedContext] = useState(false);
         const [selectedStepId, setSelectedStepId] = useState(null);
-        const [expandedProcessContext, setExpandedProcessContext] = useState(false);
-        // Parent task states
-        const [parentTask, setParentTask] = useState(null);
-        const [hierarchyInfo, setHierarchyInfo] = useState(null);
-        
-        // Resizable panel states
-        const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
-            const saved = localStorage.getItem('waitNodePanelWidth');
-            return saved ? parseInt(saved) : 320; // Default w-80 = 320px
-        });
-        const [isResizing, setIsResizing] = useState(false);
-        const [isMobile, setIsMobile] = useState(false);
-        
-        // Constants for resize constraints
-        const MIN_PANEL_WIDTH = 280;
-        const MAX_PANEL_WIDTH = 600;
-        const DEFAULT_WIDTH = 320;
 
         useEffect(() => {
             initializeApp();
         }, []);
-        
-        // Mobile detection
-        useEffect(() => {
-            const checkMobile = () => {
-                setIsMobile(window.innerWidth < 768); // Tailwind's md: breakpoint
-            };
-            checkMobile();
-            window.addEventListener('resize', checkMobile);
-            return () => window.removeEventListener('resize', checkMobile);
-        }, []);
-        
-        // Mouse event handlers for resizing
-        useEffect(() => {
-            if (!isResizing) return;
-            
-            // Disable text selection and set cursor during resize
-            document.body.style.userSelect = 'none';
-            document.body.style.cursor = 'col-resize';
-            
-            const handleMouseMove = (e) => {
-                requestAnimationFrame(() => {
-                    const newWidth = e.clientX;
-                    
-                    // Apply constraints
-                    const constrainedWidth = Math.min(
-                        Math.max(newWidth, MIN_PANEL_WIDTH),
-                        Math.min(MAX_PANEL_WIDTH, window.innerWidth * 0.5)
-                    );
-                    
-                    setLeftPanelWidth(constrainedWidth);
-                });
-            };
-            
-            const handleMouseUp = () => {
-                setIsResizing(false);
-                document.body.style.userSelect = '';
-                document.body.style.cursor = '';
-                
-                // Persist to localStorage
-                localStorage.setItem('waitNodePanelWidth', leftPanelWidth.toString());
-            };
-            
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
-            
-            return () => {
-                document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
-                document.body.style.userSelect = '';
-                document.body.style.cursor = '';
-            };
-        }, [isResizing, leftPanelWidth]);
-        
-        // ESC key to cancel resize
-        useEffect(() => {
-            const handleKeyDown = (e) => {
-                if (e.key === 'Escape' && isResizing) {
-                    setIsResizing(false);
-                    document.body.style.userSelect = '';
-                    document.body.style.cursor = '';
-                }
-            };
-            
-            if (isResizing) {
-                document.addEventListener('keydown', handleKeyDown);
-                return () => document.removeEventListener('keydown', handleKeyDown);
-            }
-        }, [isResizing]);
 
         async function initializeApp() {
             try {
@@ -2217,18 +1620,6 @@
                 }
 
                 // Set all the state from the backend response
-                if (data.parent_task) {
-                    setParentTask(data.parent_task);
-                    console.log('Parent task found:', data.parent_task.name);
-                } else {
-                    console.log('No parent task - Process Library is top-level');
-                }
-                
-                if (data.hierarchy) {
-                    setHierarchyInfo(data.hierarchy);
-                    console.log('Task hierarchy:', data.hierarchy);
-                }
-                
                 setProcessLibraryRoot(data.root_task);
                 setTaskData(data.wait_task);
                 setMainTask(data.main_task);
@@ -2276,61 +1667,14 @@
 
         return (
             <div className="min-h-screen bg-gray-100">
-                {/* Overlay during resize to prevent content interaction */}
-                {isResizing && (
-                    <div className="fixed inset-0 z-40" style={{ cursor: 'col-resize' }} />
-                )}
-                
-                {/* Optional: Width indicator during resize */}
-                {isResizing && (
-                    <div className="fixed z-50 bg-gray-800 text-white px-2 py-1 rounded text-xs pointer-events-none"
-                         style={{ 
-                             left: leftPanelWidth + 10, 
-                             top: '50%',
-                             transform: 'translateY(-50%)'
-                         }}>
-                        {leftPanelWidth}px
-                    </div>
-                )}
-                
-                <div className="flex h-screen relative">
-                    {/* Left Panel with dynamic width */}
-                    <div 
-                        style={{ 
-                            width: isMobile ? '100%' : `${leftPanelWidth}px`,
-                            minWidth: `${MIN_PANEL_WIDTH}px`,
-                            maxWidth: `${MAX_PANEL_WIDTH}px`,
-                            transition: isResizing ? 'none' : 'width 0.2s ease-out'
-                        }}
-                        className="flex-shrink-0 relative"
-                    >
-                        <MainTaskPanel 
-                            parentTask={parentTask}
-                            mainTask={mainTask} 
-                            subtasks={subtasks}
-                            selectedStepId={selectedStepId}
-                            onStepSelect={setSelectedStepId}
-                            panelWidth={leftPanelWidth}
-                        />
+                <div className="flex h-screen">
+                    {/* Left Panel - Main Task Context */}
+                    <div className="w-80 flex-shrink-0">
+                        <MainTaskPanel mainTask={mainTask} />
                     </div>
                     
-                    {/* Resize Handle - Hidden on mobile */}
-                    {!isMobile && (
-                        <ResizeHandle 
-                            onMouseDown={(e) => {
-                                e.preventDefault();
-                                setIsResizing(true);
-                            }}
-                            onDoubleClick={() => {
-                                setLeftPanelWidth(DEFAULT_WIDTH);
-                                localStorage.setItem('waitNodePanelWidth', DEFAULT_WIDTH.toString());
-                            }}
-                            isResizing={isResizing}
-                        />
-                    )}
-                    
-                    {/* Main Content Area - Hidden on mobile to give full width to panel */}
-                    <div className={`flex-1 overflow-y-auto min-w-0 ${isMobile ? 'hidden md:block' : ''}`}>
+                    {/* Main Content Area */}
+                    <div className="flex-1 overflow-y-auto">
                         <div className="bg-white shadow-lg">
                             {/* Header */}
                             <div className="bg-white border-b border-gray-200 p-6">
@@ -2411,36 +1755,20 @@
                                 </div>
                             )}
 
-                            {/* Process Context - Collapsible */}
+                            {/* Process Context */}
                             {processText && (
-                                <div className="bg-white border-b border-gray-200">
-                                    <div 
-                                        onClick={() => setExpandedProcessContext(!expandedProcessContext)}
-                                        className="p-6 cursor-pointer hover:bg-gray-50 transition-colors duration-200"
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                                📋 Process Context
-                                            </h3>
-                                            <span className={`text-gray-400 transition-transform duration-200 ${
-                                                expandedProcessContext ? 'rotate-180' : ''
-                                            }`}>
-                                                ▼
-                                            </span>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className={`accordion-content ${expandedProcessContext ? 'show' : ''}`}>
-                                        {expandedProcessContext && (
-                                            <div className="px-6 pb-6">
-                                                <div className="bg-gray-50 p-4 rounded-lg font-mono text-sm text-gray-700 whitespace-pre-wrap">
-                                                    {processText}
-                                                </div>
-                                            </div>
-                                        )}
+                                <div className="bg-white border-b border-gray-200 p-6">
+                                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                                        📋 Process Context
+                                    </h3>
+                                    <div className="bg-gray-50 p-4 rounded-lg font-mono text-sm text-gray-700 whitespace-pre-wrap">
+                                        {processText}
                                     </div>
                                 </div>
                             )}
+
+                            {/* Process Steps Accordion */}
+                            <ProcessStepsAccordion subtasks={subtasks} />
 
                             {/* Approval Module - Only show for wait nodes */}
                             {taskData && getCustomField(taskData, FIELD_IDS.WAIT_CONFIG) ? (
@@ -2458,9 +1786,6 @@
                                     </div>
                                 </div>
                             )}
-
-                            {/* Process Steps Accordion */}
-                            <ProcessStepsAccordion subtasks={subtasks} />
 
                             {/* Summary Stats */}
                             <div className="p-6 bg-gray-50 border-b border-gray-200">
@@ -2486,6 +1811,13 @@
                             </div>
                         </div>
                     </div>
+
+                    {/* Right Panel - Step Details */}
+                    <StepDetailsPanel 
+                        subtasks={subtasks}
+                        selectedStepId={selectedStepId}
+                        onStepSelect={setSelectedStepId}
+                    />
                 </div>
             </div>
         );
