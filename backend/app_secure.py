@@ -534,6 +534,96 @@ def update_field(task_id, field_id):
         return jsonify({"error": "Internal server error"}), 500
 
 
+@app.route('/api/task/<task_id>/custom-field', methods=['PUT'])
+@login_required
+@rate_limiter.rate_limit(limit='50 per minute')
+def update_single_custom_field(task_id):
+    """
+    Update a single custom field on a task
+    Used by the editable page for auto-save functionality
+    """
+    try:
+        data = request.json
+        
+        if not data or 'field_id' not in data or 'value' not in data:
+            return jsonify({"error": "field_id and value are required"}), 400
+        
+        field_id = data['field_id']
+        value = data['value']
+        field_type = data.get('field_type', 'text')
+        
+        # Special handling for checkbox type
+        if field_type == 'checkbox':
+            value = value in [True, 'true', 'True', 1, '1']
+        
+        # Make the ClickUp API call
+        url = f"https://api.clickup.com/api/v2/task/{task_id}/field/{field_id}"
+        payload = {"value": value}
+        
+        headers = {
+            "Authorization": CLICKUP_API_KEY,
+            "Content-Type": "application/json"
+        }
+        
+        params = {"custom_task_ids": "true", "team_id": CLICKUP_TEAM_ID}
+        
+        response = requests.post(url, headers=headers, params=params, json=payload)
+        response.raise_for_status()
+        
+        logger.info(f"Updated field {field_id} on task {task_id} by {request.user.get('email')}")
+        
+        return jsonify({
+            "success": True,
+            "task_id": task_id,
+            "field_id": field_id,
+            "value": value
+        })
+        
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"ClickUp API error updating field: {e.response.text if e.response else str(e)}")
+        return jsonify({"error": "Failed to update field"}), e.response.status_code if e.response else 500
+    except Exception as e:
+        logger.error(f"Error updating custom field: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/task/<task_id>', methods=['DELETE'])
+@login_required
+@rate_limiter.rate_limit(limit='20 per minute')
+def delete_task(task_id):
+    """
+    Delete a task from ClickUp
+    Used by the editable page for step deletion
+    """
+    try:
+        # Make the ClickUp API call
+        url = f"https://api.clickup.com/api/v2/task/{task_id}"
+        
+        headers = {
+            "Authorization": CLICKUP_API_KEY
+        }
+        
+        params = {"custom_task_ids": "true", "team_id": CLICKUP_TEAM_ID}
+        
+        response = requests.delete(url, headers=headers, params=params)
+        response.raise_for_status()
+        
+        logger.info(f"Deleted task {task_id} by {request.user.get('email')}")
+        
+        return jsonify({
+            "success": True,
+            "task_id": task_id,
+            "message": "Task deleted successfully"
+        })
+        
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"ClickUp API error deleting task: {e.response.text if e.response else str(e)}")
+        return jsonify({"error": "Failed to delete task"}), e.response.status_code if e.response else 500
+    except Exception as e:
+        logger.error(f"Error deleting task: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 # =====================================================
 # Secure Page Routes - Server-Side Rendering
 # =====================================================
@@ -551,6 +641,21 @@ def serve_wait_node_v2():
     
     # Render the template - query parameters are automatically available in the template
     return render_template('secured/wait-node-v2.html')
+
+
+@app.route('/pages/wait-node-editable')
+@login_required
+@rate_limiter.rate_limit(limit='100 per hour')
+def serve_wait_node_editable():
+    """
+    Serve wait-node-editable page with edit capabilities
+    OAuth protected page for editing Process Library steps
+    """
+    # Log page access for security audit
+    logger.info(f"Secure page access: wait-node-editable by {request.user.get('email')}")
+    
+    # Render the editable template - query parameters are automatically available
+    return render_template('secured/wait-node-editable.html')
 
 
 @app.route('/pages/wait-node')
@@ -573,7 +678,7 @@ def pages_health():
     return jsonify({
         'status': 'healthy',
         'pages_available': True,
-        'pages': ['wait-node', 'wait-node-v2']
+        'pages': ['wait-node', 'wait-node-v2', 'wait-node-editable']
     }), 200
 
 
