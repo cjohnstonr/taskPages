@@ -2892,26 +2892,26 @@
                         </div>
                     </div>
                 </div>
-                
-                {/* Right Panel for Editing Steps - ALWAYS VISIBLE */}
-                <RightPanel
-                    step={selectedStepForEdit}
-                    onClose={() => {
-                        setSelectedStepForEdit(null);
-                    }}
-                    width={rightPanelWidth}
-                    onResize={(newWidth) => {
-                        setRightPanelWidth(newWidth);
-                        localStorage.setItem('rightPanelWidth', newWidth);
-                    }}
-                    onStepDeleted={(deletedTaskId) => {
-                        // Update the subtasks list to reflect deletion
-                        setSubtasks(prev => prev.filter(s => s.id !== deletedTaskId));
-                        // Close the panel
-                        setSelectedStepForEdit(null);
-                    }}
-                />
             </div>
+            
+            {/* Right Panel for Editing Steps - ALWAYS VISIBLE as third column */}
+            <RightPanel
+                step={selectedStepForEdit}
+                onClose={() => {
+                    setSelectedStepForEdit(null);
+                }}
+                width={rightPanelWidth}
+                onResize={(newWidth) => {
+                    setRightPanelWidth(newWidth);
+                    localStorage.setItem('rightPanelWidth', newWidth);
+                }}
+                onStepDeleted={(deletedTaskId) => {
+                    // Update the subtasks list to reflect deletion
+                    setSubtasks(prev => prev.filter(s => s.id !== deletedTaskId));
+                    // Close the panel
+                    setSelectedStepForEdit(null);
+                }}
+            />
         );
     }
 
