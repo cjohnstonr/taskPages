@@ -2220,18 +2220,15 @@
         const stepNumber = getCustomField(step, FIELD_IDS.STEP_NUMBER) || '?';
         
         return (
-            <>
-                {/* Backdrop */}
-                <div 
-                    className="fixed inset-0 bg-black bg-opacity-30 z-40"
-                    onClick={onClose}
-                />
-                
-                {/* Panel */}
-                <div 
-                    className="fixed right-0 top-0 h-full bg-white shadow-xl z-50 flex"
-                    style={{ width: `${panelWidth}px` }}
-                >
+            <div 
+                className="h-full bg-gray-50 border-l border-gray-300 flex flex-shrink-0"
+                style={{ 
+                    width: `${panelWidth}px`,
+                    minWidth: '250px',
+                    maxWidth: '500px',
+                    transition: isResizing ? 'none' : 'width 0.2s ease-out'
+                }}
+            >
                     {/* Resize Handle */}
                     <div 
                         className="w-1 bg-gray-300 hover:bg-blue-500 cursor-col-resize flex-shrink-0"
@@ -2338,7 +2335,6 @@
                             </div>
                         </div>
                     </div>
-                </div>
                 
                 {/* Delete Confirmation Dialog */}
                 {deleteConfirm && (
