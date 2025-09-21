@@ -2213,11 +2213,136 @@
             }
         }
         
-        if (!step) return null;
+        // Always render the panel structure
+        const stepNumber = step ? (getCustomField(step, FIELD_IDS.STEP_NUMBER) || '?') : null;
+        const relevantFields = step ? getRelevantCustomFields(step) : { processLibrary: [], waitNode: [] };
         
-        // Get relevant custom fields
-        const relevantFields = getRelevantCustomFields(step);
-        const stepNumber = getCustomField(step, FIELD_IDS.STEP_NUMBER) || '?';
+        const panelContent = step ? (
+            <div className="flex-1 overflow-hidden flex flex-col">
+                {/* Content Header */}
+                <div className="px-4 py-3 border-b border-gray-200 bg-white">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-gray-800">
+                            Step {stepNumber}
+                        </h3>
+                        <button
+                            onClick={onClose}
+                            className="text-gray-500 hover:text-gray-700"
+                        >
+                            <span className="text-xl">×</span>
+                        </button>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1 truncate">
+                        {step.name}
+                    </p>
+                </div>
+                
+                {/* Fields */}
+                <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                    {/* Process Library Fields */}
+                    {relevantFields.processLibrary.length > 0 && (
+                        <div className="mb-6">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-3">Process Library Fields</h4>
+                            {relevantFields.processLibrary.map(field => (
+                                <FieldEditor
+                                    key={field.id}
+                                    label={field.name}
+                                    fieldId={field.id}
+                                    taskId={step.id}
+                                    value={field.value || ''}
+                                    type={field.name === 'Process Text' ? 'textarea' : 'text'}
+                                    rows={field.name === 'Process Text' ? 6 : 1}
+                                    onUpdate={updateCustomField}
+                                    status={fieldStatus[field.id]}
+                                />
+                            ))}
+                        </div>
+                    )}
+                    
+                    {/* Wait Node Fields */}
+                    {relevantFields.waitNode.length > 0 && (
+                        <div className="mb-6">
+                            <h4 className="text-sm font-semibold text-amber-700 mb-3">Wait Node Fields</h4>
+                            {relevantFields.waitNode.map(field => (
+                                <FieldEditor
+                                    key={field.id}
+                                    label={field.name}
+                                    fieldId={field.id}
+                                    taskId={step.id}
+                                    value={field.value || ''}
+                                    type="textarea"
+                                    rows={4}
+                                    onUpdate={updateCustomField}
+                                    status={fieldStatus[field.id]}
+                                />
+                            ))}
+                        </div>
+                    )}
+                    
+                    {/* Execute Checkbox */}
+                    <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+                        <ExecuteCheckbox
+                            taskId={step.id}
+                            currentValue={getCustomField(step, FIELD_IDS.EXECUTED)}
+                            onUpdate={(value) => updateCustomField(step.id, FIELD_IDS.EXECUTED, value, 'checkbox')}
+                        />
+                    </div>
+                    
+                    {/* Delete Button */}
+                    <div className="pt-4 border-t border-gray-200">
+                        <button
+                            onClick={() => setDeleteConfirm(true)}
+                            className="w-full px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                            disabled={deleting}
+                        >
+                            {deleting ? 'Deleting...' : 'Delete Step'}
+                        </button>
+                    </div>
+                </div>
+                
+                {/* Delete Confirmation Dialog */}
+                {deleteConfirm && (
+                    <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
+                            <h3 className="text-lg font-semibold mb-3">Confirm Delete</h3>
+                            <p className="text-gray-600 mb-4">
+                                Are you sure you want to delete Step {stepNumber}? This cannot be undone.
+                            </p>
+                            <div className="flex space-x-3">
+                                <button
+                                    onClick={handleDelete}
+                                    className="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                                    disabled={deleting}
+                                >
+                                    {deleting ? 'Deleting...' : 'Delete'}
+                                </button>
+                                <button
+                                    onClick={() => setDeleteConfirm(false)}
+                                    className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                                    disabled={deleting}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        ) : (
+            // Empty state when no step is selected
+            <div className="flex-1 flex items-center justify-center">
+                <div className="text-center px-4">
+                    <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <p className="text-lg font-medium text-gray-600 mb-2">No Step Selected</p>
+                    <p className="text-sm text-gray-500">
+                        Click the Edit button on any<br/>
+                        Process Library step to begin editing
+                    </p>
+                </div>
+            </div>
+        );
         
         return (
             <div 
@@ -2238,133 +2363,8 @@
                         }}
                     />
                     
-                    {/* Panel Content */}
-                    <div className="flex-1 flex flex-col overflow-hidden">
-                        {/* Header */}
-                        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-                            <div>
-                                <h3 className="font-semibold text-lg">
-                                    Edit Step {stepNumber}
-                                </h3>
-                                <p className="text-sm text-gray-600 mt-1">{step.name}</p>
-                            </div>
-                            <button 
-                                onClick={onClose}
-                                className="text-gray-400 hover:text-gray-600 text-2xl"
-                            >
-                                ×
-                            </button>
-                        </div>
-                        
-                        {/* Scrollable Content */}
-                        <div className="flex-1 overflow-y-auto p-4">
-                            {/* Process Library Fields */}
-                            <div className="mb-6">
-                                <h4 className="text-sm font-semibold text-gray-700 mb-3">Process Library Fields</h4>
-                                
-                                {/* MCP Action */}
-                                <FieldEditor
-                                    label="MCP Action"
-                                    fieldId={FIELD_IDS.MCP_ACTION}
-                                    taskId={step.id}
-                                    value={getCustomField(step, FIELD_IDS.MCP_ACTION) || ''}
-                                    onUpdate={updateCustomField}
-                                    status={fieldStatus[FIELD_IDS.MCP_ACTION]}
-                                />
-                                
-                                {/* MCP Client */}
-                                <FieldEditor
-                                    label="MCP Client"
-                                    fieldId={FIELD_IDS.MCP_CLIENT}
-                                    taskId={step.id}
-                                    value={getCustomField(step, FIELD_IDS.MCP_CLIENT) || ''}
-                                    onUpdate={updateCustomField}
-                                    status={fieldStatus[FIELD_IDS.MCP_CLIENT]}
-                                />
-                                
-                                {/* Process Text */}
-                                <FieldEditor
-                                    label="Process Text"
-                                    fieldId={FIELD_IDS.PROCESS_TEXT}
-                                    taskId={step.id}
-                                    value={getCustomField(step, FIELD_IDS.PROCESS_TEXT) || ''}
-                                    type="textarea"
-                                    rows={6}
-                                    onUpdate={updateCustomField}
-                                    status={fieldStatus[FIELD_IDS.PROCESS_TEXT]}
-                                />
-                            </div>
-                            
-                            {/* Wait Node Fields (if applicable) */}
-                            {relevantFields.waitNode.length > 0 && (
-                                <div className="mb-6">
-                                    <h4 className="text-sm font-semibold text-amber-700 mb-3">Wait Node Fields</h4>
-                                    {relevantFields.waitNode.map(field => (
-                                        <FieldEditor
-                                            key={field.id}
-                                            label={field.name}
-                                            fieldId={field.id}
-                                            taskId={step.id}
-                                            value={field.value || ''}
-                                            type="textarea"
-                                            rows={4}
-                                            onUpdate={updateCustomField}
-                                            status={fieldStatus[field.id]}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                            
-                            {/* Execute Checkbox */}
-                            <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-                                <ExecuteCheckbox
-                                    taskId={step.id}
-                                    currentValue={getCustomField(step, FIELD_IDS.EXECUTED)}
-                                    onUpdate={(value) => updateCustomField(step.id, FIELD_IDS.EXECUTED, value, 'checkbox')}
-                                />
-                            </div>
-                            
-                            {/* Delete Button */}
-                            <div className="pt-4 border-t border-gray-200">
-                                <button
-                                    onClick={() => setDeleteConfirm(true)}
-                                    className="w-full py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
-                                >
-                                    Delete Step
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                
-                {/* Delete Confirmation Dialog */}
-                {deleteConfirm && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white p-6 rounded-lg shadow-xl">
-                            <h3 className="text-lg font-semibold mb-4">
-                                Delete Step {stepNumber}?
-                            </h3>
-                            <p className="text-gray-600 mb-6">
-                                This cannot be undone. The step will be permanently deleted from ClickUp.
-                            </p>
-                            <div className="flex space-x-4">
-                                <button
-                                    onClick={() => setDeleteConfirm(false)}
-                                    className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-                                    disabled={deleting}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={deleteTask}
-                                    disabled={deleting}
-                                    className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                                >
-                                    {deleting ? 'Deleting...' : 'Delete'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                    {/* Panel Content - Always rendered, shows empty state or content */}
+                    {panelContent}
             </div>
         );
     }
@@ -2893,26 +2893,24 @@
                     </div>
                 </div>
                 
-                {/* Right Panel for Editing Steps */}
-                {selectedStepForEdit && (
-                    <RightPanel
-                        step={selectedStepForEdit}
-                        onClose={() => {
-                            setSelectedStepForEdit(null);
-                        }}
-                        width={rightPanelWidth}
-                        onResize={(newWidth) => {
-                            setRightPanelWidth(newWidth);
-                            localStorage.setItem('rightPanelWidth', newWidth);
-                        }}
-                        onStepDeleted={(deletedTaskId) => {
-                            // Update the subtasks list to reflect deletion
-                            setSubtasks(prev => prev.filter(s => s.id !== deletedTaskId));
-                            // Close the panel
-                            setSelectedStepForEdit(null);
-                        }}
-                    />
-                )}
+                {/* Right Panel for Editing Steps - ALWAYS VISIBLE */}
+                <RightPanel
+                    step={selectedStepForEdit}
+                    onClose={() => {
+                        setSelectedStepForEdit(null);
+                    }}
+                    width={rightPanelWidth}
+                    onResize={(newWidth) => {
+                        setRightPanelWidth(newWidth);
+                        localStorage.setItem('rightPanelWidth', newWidth);
+                    }}
+                    onStepDeleted={(deletedTaskId) => {
+                        // Update the subtasks list to reflect deletion
+                        setSubtasks(prev => prev.filter(s => s.id !== deletedTaskId));
+                        // Close the panel
+                        setSelectedStepForEdit(null);
+                    }}
+                />
             </div>
         );
     }
