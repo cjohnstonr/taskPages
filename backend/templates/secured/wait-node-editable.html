@@ -2119,7 +2119,7 @@
     }
 
     // Right Panel Component for Editing Steps
-    function RightPanel({ step, isOpen, onClose, width, onResize, onStepDeleted }) {
+    function RightPanel({ step, onClose, width, onResize, onStepDeleted }) {
         const [isResizing, setIsResizing] = useState(false);
         const [panelWidth, setPanelWidth] = useState(width || 400);
         const [fieldStatus, setFieldStatus] = useState({});
@@ -2213,7 +2213,7 @@
             }
         }
         
-        if (!isOpen || !step) return null;
+        if (!step) return null;
         
         // Get relevant custom fields
         const relevantFields = getRelevantCustomFields(step);
