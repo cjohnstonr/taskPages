@@ -428,7 +428,7 @@
     }
 
     // Process Steps Accordion Component
-    function ProcessStepsAccordion({ subtasks }) {
+    function ProcessStepsAccordion({ subtasks, onEditStep }) {
         const [expandedSteps, setExpandedSteps] = useState({});
 
         const handleExpand = (taskId) => {
@@ -473,13 +473,17 @@
 
 
 
+                        // Check if step is marked as deleted (you can add this to state)
+                        const isDeleted = subtask.status?.status === 'deleted' || subtask.archived;
+                        
                         return (
-                            <div key={subtask.id} className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                            <div key={subtask.id} className={`border border-gray-200 rounded-lg overflow-hidden shadow-sm ${isDeleted ? 'opacity-50' : ''}`}>
                                 <button
                                     onClick={() => handleExpand(subtask.id)}
-                                    className={`w-full px-4 py-3 text-left bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-inset transition-colors duration-200 ${
-                                        expandedSteps[subtask.id] ? 'bg-emerald-50' : ''
+                                    className={`w-full px-4 py-3 text-left ${isDeleted ? 'bg-gray-100' : 'bg-white hover:bg-gray-50'} focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-inset transition-colors duration-200 ${
+                                        expandedSteps[subtask.id] && !isDeleted ? 'bg-emerald-50' : ''
                                     }`}
+                                    disabled={isDeleted}
                                 >
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center space-x-3 flex-1 min-w-0">
@@ -508,6 +512,24 @@
                                             )}
                                         </div>
                                         <div className="flex items-center space-x-2 flex-shrink-0">
+                                            {/* Edit button for Process Library tasks only */}
+                                            {libraryLevel !== 'Wait' && onEditStep && !isDeleted && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onEditStep(subtask);
+                                                    }}
+                                                    className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-md transition-colors duration-200"
+                                                    title="Edit this step"
+                                                >
+                                                    Edit
+                                                </button>
+                                            )}
+                                            {isDeleted && (
+                                                <span className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded">
+                                                    Deleted
+                                                </span>
+                                            )}
                                             {hasContent && (
                                                 <span
                                                     className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
@@ -2092,6 +2114,370 @@
         );
     }
 
+    // Right Panel Component for Editing Steps
+    function RightPanel({ step, isOpen, onClose, width, onResize, onStepDeleted }) {
+        const [isResizing, setIsResizing] = useState(false);
+        const [panelWidth, setPanelWidth] = useState(width || 400);
+        const [fieldStatus, setFieldStatus] = useState({});
+        const [deleteConfirm, setDeleteConfirm] = useState(false);
+        const [deleting, setDeleting] = useState(false);
+        
+        // Handle resize
+        useEffect(() => {
+            if (!isResizing) return;
+            
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor = 'col-resize';
+            
+            const handleMouseMove = (e) => {
+                const newWidth = window.innerWidth - e.clientX;
+                const constrainedWidth = Math.min(Math.max(newWidth, 300), 600);
+                setPanelWidth(constrainedWidth);
+                if (onResize) onResize(constrainedWidth);
+            };
+            
+            const handleMouseUp = () => {
+                setIsResizing(false);
+                document.body.style.userSelect = '';
+                document.body.style.cursor = '';
+                localStorage.setItem('rightPanelWidth', panelWidth.toString());
+            };
+            
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            
+            return () => {
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            };
+        }, [isResizing, panelWidth, onResize]);
+        
+        // Update custom field
+        async function updateCustomField(taskId, fieldId, value, fieldType = 'text') {
+            setFieldStatus(prev => ({ ...prev, [fieldId]: 'saving' }));
+            
+            try {
+                const response = await fetch(`/api/task/${taskId}/custom-field`, {
+                    method: 'PUT',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        field_id: fieldId,
+                        value: value,
+                        field_type: fieldType
+                    })
+                });
+                
+                if (response.ok) {
+                    setFieldStatus(prev => ({ ...prev, [fieldId]: 'saved' }));
+                    setTimeout(() => {
+                        setFieldStatus(prev => ({ ...prev, [fieldId]: 'idle' }));
+                    }, 3000);
+                    return true;
+                } else {
+                    throw new Error('Failed to update field');
+                }
+            } catch (error) {
+                setFieldStatus(prev => ({ ...prev, [fieldId]: 'error' }));
+                console.error('Failed to update field:', error);
+                return false;
+            }
+        }
+        
+        // Delete task
+        async function deleteTask() {
+            setDeleting(true);
+            try {
+                const response = await fetch(`/api/task/${step.id}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                
+                if (response.status === 204 || response.ok) {
+                    onStepDeleted(step.id);
+                    onClose();
+                    return true;
+                } else {
+                    throw new Error('Failed to delete task');
+                }
+            } catch (error) {
+                alert('Failed to delete step: ' + error.message);
+                return false;
+            } finally {
+                setDeleting(false);
+                setDeleteConfirm(false);
+            }
+        }
+        
+        if (!isOpen || !step) return null;
+        
+        // Get relevant custom fields
+        const relevantFields = getRelevantCustomFields(step);
+        const stepNumber = getCustomField(step, FIELD_IDS.STEP_NUMBER) || '?';
+        
+        return (
+            <>
+                {/* Backdrop */}
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-30 z-40"
+                    onClick={onClose}
+                />
+                
+                {/* Panel */}
+                <div 
+                    className="fixed right-0 top-0 h-full bg-white shadow-xl z-50 flex"
+                    style={{ width: `${panelWidth}px` }}
+                >
+                    {/* Resize Handle */}
+                    <div 
+                        className="w-1 bg-gray-300 hover:bg-blue-500 cursor-col-resize flex-shrink-0"
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            setIsResizing(true);
+                        }}
+                    />
+                    
+                    {/* Panel Content */}
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        {/* Header */}
+                        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+                            <div>
+                                <h3 className="font-semibold text-lg">
+                                    Edit Step {stepNumber}
+                                </h3>
+                                <p className="text-sm text-gray-600 mt-1">{step.name}</p>
+                            </div>
+                            <button 
+                                onClick={onClose}
+                                className="text-gray-400 hover:text-gray-600 text-2xl"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        
+                        {/* Scrollable Content */}
+                        <div className="flex-1 overflow-y-auto p-4">
+                            {/* Process Library Fields */}
+                            <div className="mb-6">
+                                <h4 className="text-sm font-semibold text-gray-700 mb-3">Process Library Fields</h4>
+                                
+                                {/* MCP Action */}
+                                <FieldEditor
+                                    label="MCP Action"
+                                    fieldId={FIELD_IDS.MCP_ACTION}
+                                    taskId={step.id}
+                                    value={getCustomField(step, FIELD_IDS.MCP_ACTION) || ''}
+                                    onUpdate={updateCustomField}
+                                    status={fieldStatus[FIELD_IDS.MCP_ACTION]}
+                                />
+                                
+                                {/* MCP Client */}
+                                <FieldEditor
+                                    label="MCP Client"
+                                    fieldId={FIELD_IDS.MCP_CLIENT}
+                                    taskId={step.id}
+                                    value={getCustomField(step, FIELD_IDS.MCP_CLIENT) || ''}
+                                    onUpdate={updateCustomField}
+                                    status={fieldStatus[FIELD_IDS.MCP_CLIENT]}
+                                />
+                                
+                                {/* Process Text */}
+                                <FieldEditor
+                                    label="Process Text"
+                                    fieldId={FIELD_IDS.PROCESS_TEXT}
+                                    taskId={step.id}
+                                    value={getCustomField(step, FIELD_IDS.PROCESS_TEXT) || ''}
+                                    type="textarea"
+                                    rows={6}
+                                    onUpdate={updateCustomField}
+                                    status={fieldStatus[FIELD_IDS.PROCESS_TEXT]}
+                                />
+                            </div>
+                            
+                            {/* Wait Node Fields (if applicable) */}
+                            {relevantFields.waitNode.length > 0 && (
+                                <div className="mb-6">
+                                    <h4 className="text-sm font-semibold text-amber-700 mb-3">Wait Node Fields</h4>
+                                    {relevantFields.waitNode.map(field => (
+                                        <FieldEditor
+                                            key={field.id}
+                                            label={field.name}
+                                            fieldId={field.id}
+                                            taskId={step.id}
+                                            value={field.value || ''}
+                                            type="textarea"
+                                            rows={4}
+                                            onUpdate={updateCustomField}
+                                            status={fieldStatus[field.id]}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                            
+                            {/* Execute Checkbox */}
+                            <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+                                <ExecuteCheckbox
+                                    taskId={step.id}
+                                    currentValue={getCustomField(step, FIELD_IDS.EXECUTED)}
+                                    onUpdate={(value) => updateCustomField(step.id, FIELD_IDS.EXECUTED, value, 'checkbox')}
+                                />
+                            </div>
+                            
+                            {/* Delete Button */}
+                            <div className="pt-4 border-t border-gray-200">
+                                <button
+                                    onClick={() => setDeleteConfirm(true)}
+                                    className="w-full py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                                >
+                                    Delete Step
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                {/* Delete Confirmation Dialog */}
+                {deleteConfirm && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
+                        <div className="bg-white p-6 rounded-lg shadow-xl">
+                            <h3 className="text-lg font-semibold mb-4">
+                                Delete Step {stepNumber}?
+                            </h3>
+                            <p className="text-gray-600 mb-6">
+                                This cannot be undone. The step will be permanently deleted from ClickUp.
+                            </p>
+                            <div className="flex space-x-4">
+                                <button
+                                    onClick={() => setDeleteConfirm(false)}
+                                    className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                                    disabled={deleting}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={deleteTask}
+                                    disabled={deleting}
+                                    className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                                >
+                                    {deleting ? 'Deleting...' : 'Delete'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </>
+        );
+    }
+    
+    // Field Editor Component
+    function FieldEditor({ label, fieldId, taskId, value, type = 'text', rows = 1, onUpdate, status }) {
+        const [localValue, setLocalValue] = useState(value);
+        const [saveTimeout, setSaveTimeout] = useState(null);
+        
+        useEffect(() => {
+            setLocalValue(value);
+        }, [value]);
+        
+        const handleChange = (e) => {
+            const newValue = e.target.value;
+            setLocalValue(newValue);
+            
+            // Clear existing timeout
+            if (saveTimeout) clearTimeout(saveTimeout);
+            
+            // Auto-save after 1 second of no typing
+            const timeout = setTimeout(() => {
+                onUpdate(taskId, fieldId, newValue);
+            }, 1000);
+            
+            setSaveTimeout(timeout);
+        };
+        
+        const handleBlur = () => {
+            // Clear timeout and save immediately on blur
+            if (saveTimeout) clearTimeout(saveTimeout);
+            onUpdate(taskId, fieldId, localValue);
+        };
+        
+        return (
+            <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {label}
+                </label>
+                <div className="relative">
+                    {type === 'textarea' ? (
+                        <textarea
+                            value={localValue}
+                            onChange={handleChange}
+                            onBlur={handleBlur}
+                            rows={rows}
+                            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                    ) : (
+                        <input
+                            type="text"
+                            value={localValue}
+                            onChange={handleChange}
+                            onBlur={handleBlur}
+                            className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                    )}
+                    
+                    {/* Status Indicator */}
+                    <div className="absolute right-2 top-2">
+                        {status === 'saving' && <span className="text-blue-500">⟳</span>}
+                        {status === 'saved' && <span className="text-green-500">✓</span>}
+                        {status === 'error' && <span className="text-red-500">✗</span>}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    
+    // Execute Checkbox Component
+    function ExecuteCheckbox({ taskId, currentValue, onUpdate }) {
+        const [message, setMessage] = useState('');
+        const [saving, setSaving] = useState(false);
+        
+        const handleExecute = async () => {
+            if (!currentValue && !saving) {
+                setSaving(true);
+                const success = await onUpdate(true);
+                
+                if (success) {
+                    setMessage('✓ Step queued for re-execution');
+                    setTimeout(() => setMessage(''), 3000);
+                } else {
+                    setMessage('✗ Failed to queue execution');
+                }
+                setSaving(false);
+            }
+        };
+        
+        return (
+            <div>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                        type="checkbox"
+                        checked={currentValue || false}
+                        onChange={handleExecute}
+                        disabled={currentValue || saving}
+                        className="w-5 h-5"
+                    />
+                    <span className="font-medium">Execute Step</span>
+                </label>
+                {message && (
+                    <p className="mt-2 text-sm text-blue-600">{message}</p>
+                )}
+                {currentValue && (
+                    <p className="mt-2 text-sm text-gray-500">
+                        Step will be re-executed by automation
+                    </p>
+                )}
+            </div>
+        );
+    }
+
     // Main App Component
     function WaitApprovalApp() {
         const [loading, setLoading] = useState(true);
@@ -2106,6 +2492,15 @@
         // Parent task states
         const [parentTask, setParentTask] = useState(null);
         const [hierarchyInfo, setHierarchyInfo] = useState(null);
+        
+        // Right panel states (NEW)
+        const [rightPanelOpen, setRightPanelOpen] = useState(false);
+        const [selectedStepForEdit, setSelectedStepForEdit] = useState(null);
+        const [rightPanelWidth, setRightPanelWidth] = useState(() => {
+            const saved = localStorage.getItem('rightPanelWidth');
+            return saved ? parseInt(saved) : 400;
+        });
+        const [deletedSteps, setDeletedSteps] = useState(new Set());
         
         // Resizable panel states
         const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
@@ -2460,7 +2855,13 @@
                             )}
 
                             {/* Process Steps Accordion */}
-                            <ProcessStepsAccordion subtasks={subtasks} />
+                            <ProcessStepsAccordion 
+                                subtasks={subtasks} 
+                                onEditStep={(step) => {
+                                    setSelectedStepForEdit(step);
+                                    setRightPanelOpen(true);
+                                }}
+                            />
 
                             {/* Summary Stats */}
                             <div className="p-6 bg-gray-50 border-b border-gray-200">
@@ -2487,6 +2888,30 @@
                         </div>
                     </div>
                 </div>
+                
+                {/* Right Panel for Editing Steps */}
+                {selectedStepForEdit && (
+                    <RightPanel
+                        step={selectedStepForEdit}
+                        isOpen={rightPanelOpen}
+                        onClose={() => {
+                            setRightPanelOpen(false);
+                            setSelectedStepForEdit(null);
+                        }}
+                        width={rightPanelWidth}
+                        onResize={(newWidth) => {
+                            setRightPanelWidth(newWidth);
+                            localStorage.setItem('rightPanelWidth', newWidth);
+                        }}
+                        onStepDeleted={(deletedTaskId) => {
+                            // Update the subtasks list to reflect deletion
+                            setSubtasks(prev => prev.filter(s => s.id !== deletedTaskId));
+                            // Close the panel
+                            setRightPanelOpen(false);
+                            setSelectedStepForEdit(null);
+                        }}
+                    />
+                )}
             </div>
         );
     }
