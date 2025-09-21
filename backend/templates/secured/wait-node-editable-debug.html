@@ -429,6 +429,7 @@
 
     // Process Steps Accordion Component
     function ProcessStepsAccordion({ subtasks, onEditStep, selectedStepId }) {
+        console.log('ProcessStepsAccordion rendered with:', { subtasksCount: subtasks?.length, selectedStepId, hasOnEditStep: !!onEditStep });
         const [expandedSteps, setExpandedSteps] = useState({});
 
         const handleExpand = (taskId) => {
@@ -466,7 +467,7 @@
 
                         const libraryLevelObj = subtask.custom_fields.find(e=>e.id === FIELD_IDS.LIBRARY_LEVEL)
                         const libraryLevelValue = libraryLevelObj?.value || null;
-                        const optionsLibrary = libraryLevelObj?.type_config
+                        const optionsLibrary = libraryLevelObj?.type_
                             ?.options || [];
                         const elibrary = optionsLibrary.find(e => e.orderindex === libraryLevelValue)
                         const libraryLevel = elibrary?.name || ''
@@ -513,7 +514,10 @@
                                         </div>
                                         <div className="flex items-center space-x-2 flex-shrink-0">
                                             {/* Edit button for Process Library tasks only */}
-                                            {libraryLevel !== 'Wait' && onEditStep && !isDeleted && (
+                                            {(() => {
+                                                console.log('Edit button check for step:', subtask.id, { libraryLevel, hasOnEditStep: !!onEditStep, isDeleted });
+                                                return libraryLevel !== 'Wait' && onEditStep && !isDeleted;
+                                            })() && (
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
@@ -2120,6 +2124,7 @@
 
     // Right Panel Component for Editing Steps
     function RightPanel({ step, onClose, width, onResize, onStepDeleted }) {
+        console.log('RightPanel rendered with step:', step);
         const [isResizing, setIsResizing] = useState(false);
         const [panelWidth, setPanelWidth] = useState(width || 400);
         const [fieldStatus, setFieldStatus] = useState({});
@@ -2858,10 +2863,14 @@
                                 subtasks={subtasks} 
                                 selectedStepId={selectedStepForEdit?.id}
                                 onEditStep={(step) => {
+                                    console.log('Edit button clicked for step:', step);
                                     // Toggle: if same step is clicked, close panel
+                                    console.log('Current selectedStepForEdit:', selectedStepForEdit);
                                     if (selectedStepForEdit && selectedStepForEdit.id === step.id) {
+                                        console.log('Closing panel - same step clicked');
                                         setSelectedStepForEdit(null);
                                     } else {
+                                        console.log('Opening panel for step:', step);
                                         setSelectedStepForEdit(step);
                                     }
                                 }}
@@ -2894,7 +2903,10 @@
                 </div>
                 
                 {/* Right Panel for Editing Steps */}
-                {selectedStepForEdit && (
+                {(() => {
+                    console.log('Right panel check - selectedStepForEdit:', selectedStepForEdit);
+                    return selectedStepForEdit;
+                })() && (
                     <RightPanel
                         step={selectedStepForEdit}
                         onClose={() => {
