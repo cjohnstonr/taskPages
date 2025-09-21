@@ -428,7 +428,7 @@
     }
 
     // Process Steps Accordion Component
-    function ProcessStepsAccordion({ subtasks, onEditStep }) {
+    function ProcessStepsAccordion({ subtasks, onEditStep, selectedStepId }) {
         const [expandedSteps, setExpandedSteps] = useState({});
 
         const handleExpand = (taskId) => {
@@ -519,10 +519,14 @@
                                                         e.stopPropagation();
                                                         onEditStep(subtask);
                                                     }}
-                                                    className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-md transition-colors duration-200"
-                                                    title="Edit this step"
+                                                    className={`text-xs px-3 py-1 rounded-md transition-colors duration-200 ${
+                                                        selectedStepId === subtask.id 
+                                                            ? 'bg-blue-600 text-white' 
+                                                            : 'bg-blue-500 hover:bg-blue-600 text-white'
+                                                    }`}
+                                                    title={selectedStepId === subtask.id ? "Close editor" : "Edit this step"}
                                                 >
-                                                    Edit
+                                                    {selectedStepId === subtask.id ? 'Close' : 'Edit'}
                                                 </button>
                                             )}
                                             {isDeleted && (
@@ -2338,7 +2342,7 @@
                 
                 {/* Delete Confirmation Dialog */}
                 {deleteConfirm && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                         <div className="bg-white p-6 rounded-lg shadow-xl">
                             <h3 className="text-lg font-semibold mb-4">
                                 Delete Step {stepNumber}?
@@ -2365,7 +2369,7 @@
                         </div>
                     </div>
                 )}
-            </>
+            </div>
         );
     }
     
@@ -2493,12 +2497,11 @@
         const [parentTask, setParentTask] = useState(null);
         const [hierarchyInfo, setHierarchyInfo] = useState(null);
         
-        // Right panel states (NEW)
-        const [rightPanelOpen, setRightPanelOpen] = useState(false);
+        // Right panel states (third column)
         const [selectedStepForEdit, setSelectedStepForEdit] = useState(null);
         const [rightPanelWidth, setRightPanelWidth] = useState(() => {
             const saved = localStorage.getItem('rightPanelWidth');
-            return saved ? parseInt(saved) : 400;
+            return saved ? parseInt(saved) : 350;
         });
         const [deletedSteps, setDeletedSteps] = useState(new Set());
         
@@ -2857,9 +2860,14 @@
                             {/* Process Steps Accordion */}
                             <ProcessStepsAccordion 
                                 subtasks={subtasks} 
+                                selectedStepId={selectedStepForEdit?.id}
                                 onEditStep={(step) => {
-                                    setSelectedStepForEdit(step);
-                                    setRightPanelOpen(true);
+                                    // Toggle: if same step is clicked, close panel
+                                    if (selectedStepForEdit && selectedStepForEdit.id === step.id) {
+                                        setSelectedStepForEdit(null);
+                                    } else {
+                                        setSelectedStepForEdit(step);
+                                    }
                                 }}
                             />
 
@@ -2893,9 +2901,7 @@
                 {selectedStepForEdit && (
                     <RightPanel
                         step={selectedStepForEdit}
-                        isOpen={rightPanelOpen}
                         onClose={() => {
-                            setRightPanelOpen(false);
                             setSelectedStepForEdit(null);
                         }}
                         width={rightPanelWidth}
@@ -2907,7 +2913,6 @@
                             // Update the subtasks list to reflect deletion
                             setSubtasks(prev => prev.filter(s => s.id !== deletedTaskId));
                             // Close the panel
-                            setRightPanelOpen(false);
                             setSelectedStepForEdit(null);
                         }}
                     />
