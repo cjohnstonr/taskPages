@@ -2346,7 +2346,7 @@
         
         return (
             <div 
-                className="h-full bg-gray-50 border-l border-gray-300 flex flex-shrink-0"
+                className="h-full bg-gray-50 border-l border-gray-300 flex-shrink-0"
                 style={{ 
                     width: `${panelWidth}px`,
                     minWidth: '250px',
@@ -2724,7 +2724,7 @@
                     )}
                     
                     {/* Main Content Area - Hidden on mobile to give full width to panel */}
-                    <div className={`flex-1 overflow-y-auto min-w-0 ${isMobile ? 'hidden md:block' : ''}`}>
+                    <div className={`flex-grow overflow-y-auto min-w-0 ${isMobile ? 'hidden md:block' : ''}`}>
                         <div className="bg-white shadow-lg">
                             {/* Header */}
                             <div className="bg-white border-b border-gray-200 p-6">
