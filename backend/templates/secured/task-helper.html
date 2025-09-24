@@ -523,8 +523,8 @@
                     throw new Error('No task_id parameter provided');
                 }
                 
-                // Fetch task data
-                const response = await fetch(`${BACKEND_URL}/api/initialize/${taskId}`, {
+                // Fetch task data using task-helper initialization endpoint
+                const response = await fetch(`${BACKEND_URL}/api/task-helper/initialize/${taskId}`, {
                     credentials: 'include'
                 });
                 

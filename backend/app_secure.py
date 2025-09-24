@@ -632,6 +632,83 @@ def delete_task(task_id):
 # Task Helper API Endpoints
 # =====================================================
 
+@app.route('/api/task-helper/initialize/<task_id>', methods=['GET'])
+@login_required
+@rate_limiter.rate_limit(limit='50 per minute')
+def initialize_task_helper(task_id):
+    """
+    Initialize task helper with task data and hierarchy
+    Reuses wait-node logic but can be customized for task-helper specific needs
+    """
+    try:
+        # Get ClickUp API configuration
+        clickup_token = os.getenv('CLICKUP_API_KEY')
+        if not clickup_token:
+            logger.error("ClickUp API key not configured")
+            return jsonify({"error": "ClickUp integration not configured"}), 500
+
+        # Fetch the main task
+        task_response = requests.get(
+            f"https://api.clickup.com/api/v2/task/{task_id}",
+            headers={"Authorization": clickup_token},
+            params={"include_subtasks": "true"}
+        )
+        
+        if task_response.status_code == 404:
+            return jsonify({"error": "Task not found"}), 404
+        elif not task_response.ok:
+            logger.error(f"ClickUp API error fetching task: {task_response.status_code}")
+            return jsonify({"error": "Failed to fetch task from ClickUp"}), 500
+        
+        main_task = task_response.json()
+        
+        # Initialize response structure
+        response_data = {
+            "main_task": main_task,
+            "parent_task": None,
+            "subtasks": [],
+            "hierarchy": {
+                "has_parent": False,
+                "parent_id": None,
+                "is_subtask": False
+            }
+        }
+        
+        # Check if this task has a parent
+        if main_task.get('parent'):
+            parent_id = main_task['parent']
+            parent_response = requests.get(
+                f"https://api.clickup.com/api/v2/task/{parent_id}",
+                headers={"Authorization": clickup_token}
+            )
+            
+            if parent_response.ok:
+                response_data["parent_task"] = parent_response.json()
+                response_data["hierarchy"]["has_parent"] = True
+                response_data["hierarchy"]["parent_id"] = parent_id
+                response_data["hierarchy"]["is_subtask"] = True
+        
+        # Get subtasks if any
+        if main_task.get('subtasks'):
+            subtask_ids = [st['id'] for st in main_task['subtasks']]
+            for subtask_id in subtask_ids[:10]:  # Limit to 10 for performance
+                subtask_response = requests.get(
+                    f"https://api.clickup.com/api/v2/task/{subtask_id}",
+                    headers={"Authorization": clickup_token}
+                )
+                if subtask_response.ok:
+                    response_data["subtasks"].append(subtask_response.json())
+        
+        return jsonify(response_data)
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"ClickUp API request failed: {e}")
+        return jsonify({"error": "Failed to communicate with ClickUp API"}), 500
+    except Exception as e:
+        logger.error(f"Error initializing task helper for task {task_id}: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
 @app.route('/api/task-helper/escalate/<task_id>', methods=['POST'])
 @login_required
 @rate_limiter.rate_limit(limit='10 per minute')
