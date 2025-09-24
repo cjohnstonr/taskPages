@@ -65,11 +65,12 @@ cat ./claude-commands/import-guides.md
 ```
 
 ## Sprint Management
-CURRENT_SPRINT: 001-oauth-authentication-debugging
-SPRINT_COUNT: 1
-STARTED: 2025-09-15
-TODO_COUNT: 6
-COMPLETED: 6
+CURRENT_SPRINT: 002-task-helper-foundation
+SPRINT_COUNT: 2
+STARTED: 2025-09-24
+TODO_COUNT: 10
+COMPLETED: 0
 
 ### Sprint History
-- 001-oauth-authentication-debugging (current)
+- 001-oauth-authentication-debugging (completed 2025-09-15)
+- 002-task-helper-foundation (current)

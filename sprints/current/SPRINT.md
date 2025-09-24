@@ -1,76 +1,66 @@
-# Sprint: 001-oauth-authentication-debugging
+# Sprint: 002-task-helper-foundation
 
 ## TODO
-- [x] Analyze Flask backend authentication implementation
-- [x] Examine OAuth handler and security configuration
-- [x] Investigate wait-node HTML page OAuth flow
-- [x] Test OAuth endpoints and Google OAuth 2.0 setup
-- [x] Identify root cause of blank screen issue
-- [x] Document findings and propose solution
+- [ ] Create Task Helper page HTML structure with modular action system
+- [ ] Implement TaskHelperApp React component with action modules registry  
+- [ ] Build EscalationModule as the first action module
+- [ ] Add TaskDataProvider for shared data context
+- [ ] Create backend API endpoints for task helper actions
+- [ ] Implement hierarchy fetching and context extraction
+- [ ] Add mobile-first responsive design with progressive disclosure
+- [ ] Integrate with existing ClickUp API infrastructure
+- [ ] Test escalation flow with real task data
+- [ ] Deploy and verify Task Helper functionality
 
 ## Requirements
-Investigation of OAuth authentication flow failure:
-- Backend: Flask 3.x on Render (https://taskpages-backend.onrender.com)
-- Frontend: Static HTML with React 18 via CDN (https://taskpages-frontend.onrender.com)
-- Authentication: Google OAuth 2.0 with workspace domain restriction
-- Issue: Blank screen when visiting wait-node page with ?task_id=XXXXX parameter
-- No console errors reported
+Build the Task Helper page as an extensible action-based system:
+
+### Core Architecture
+- **Action Modules System**: Pluggable modules where escalation is first
+- **URL Structure**: `/task-helper/{task_id}?action=escalate`  
+- **Mobile-First Design**: Progressive disclosure with collapsible sections
+- **Shared Services**: Common data fetching and AI services for all modules
+
+### Phase 1 Scope: Foundation + Escalation
+- Create modular React component structure
+- Implement escalation module with AI-generated summaries
+- Build complete task hierarchy fetching (parents, siblings, subtasks)
+- Add mobile-optimized UI with context panels
+- Integrate with existing Flask backend and ClickUp API
+
+### Technical Foundation
+- Extend existing Flask backend with task helper endpoints
+- Reuse authentication system and ClickUp API integration
+- Build on established React/CDN architecture
+- Follow mobile-first responsive design patterns
+
+### Key Features
+- **Smart Context**: Fetch complete task hierarchy for AI context
+- **Action Modules**: Registry system for future extensibility  
+- **Progressive Disclosure**: Mobile-friendly collapsible sections
+- **AI Integration**: Generate escalation summaries from task context
 
 ## Implementation Notes
 
-### Backend Authentication Analysis
-- Flask 3.x backend properly configured with Google OAuth 2.0
-- Authentication endpoints working correctly:
-  - `/health` returns 200 OK
-  - `/auth/status` returns `{"authenticated": false}` as expected
-  - `/auth/login` properly redirects to Google OAuth with correct parameters
-- CORS configuration includes proper origins and credentials support
-- Security middleware and session management properly implemented
-- Rate limiting and security headers correctly configured
+### Planning Phase Complete
+✅ Created comprehensive architecture documentation:
+- `/task_helper_extensible_architecture.md` - Action modules system design
+- `/task_helper_hierarchy_design.md` - Mobile-first UI and context strategy  
+- `/task_helper_structure_analysis.md` - Component structure analysis
 
-### Frontend OAuth Flow Analysis
-- wait-node HTML page has proper OAuth flow implementation
-- Authentication check occurs on page load via `checkAuthentication()` function
-- Proper redirect flow to backend login endpoint when unauthenticated
-- Session storage used to preserve return URL after authentication
+### Implementation Strategy
+Starting with foundation components and escalation module:
+1. **TaskHelperApp**: Main container with action routing
+2. **Action Registry**: Modular system for future extensions
+3. **EscalationModule**: First action implementation with AI summaries
+4. **Context System**: Smart hierarchy fetching and progressive disclosure
+5. **Mobile UI**: Responsive design with touch-friendly interactions
 
-### Root Cause Identified
-**ISSUE**: Frontend deployment missing at https://taskpages-frontend.onrender.com
-- Backend is properly configured and working (502/404 error on frontend URL)
-- Authentication flow can't complete because there's no frontend to redirect back to
-- The wait-node HTML page needs to be deployed to the frontend Render service
-
-### Additional Issues Found
-1. CORS configuration in backend includes hardcoded localhost origins alongside production URLs
-2. CSP headers include backend URL in connect-src but frontend domain missing
-3. Frontend URL resolution logic may need adjustment for production environment
-
-## Solution & Next Steps
-
-### Immediate Fix Required
-1. **Deploy Frontend Service**: Deploy wait-node HTML files to https://taskpages-frontend.onrender.com
-   - Upload `/wait-node copy.html` as the main frontend application
-   - Configure static file serving on Render frontend service
-   - Ensure proper routing for task_id parameters
-
-### Configuration Updates Needed
-2. **Update CORS Configuration** in `/backend/config/security.py`:
-   - Remove localhost origins from production CORS_ORIGINS
-   - Ensure frontend domain is properly included
-
-3. **Fix CSP Headers** in security configuration:
-   - Add frontend domain to connect-src directive
-   - Review and update other CSP directives as needed
-
-4. **Environment Variables Verification**:
-   - Confirm FRONTEND_URL is set to https://taskpages-frontend.onrender.com
-   - Verify all OAuth environment variables are properly configured
-
-### Testing Plan
-1. Deploy frontend service
-2. Test OAuth flow end-to-end with ?task_id=XXXXX parameter
-3. Verify authentication redirect works correctly
-4. Confirm wait-node interface loads after authentication
+### Backend Extensions Needed
+- Task hierarchy API endpoints (parents, siblings, subtasks)
+- Action execution endpoint: `/api/task/<task_id>/action/<action_type>`
+- Context extraction utilities for AI prompt building
+- Integration with existing ClickUp API wrapper
 
 ## Current Status
-✅ Investigation complete - Root cause identified and solution documented
+Ready to implement Task Helper escalation page - leveraging wait-node component reuse strategy
