@@ -660,24 +660,32 @@ def escalate_task(task_id):
             logger.error("ClickUp API key not configured")
             return jsonify({"error": "ClickUp integration not configured"}), 500
 
-        # Custom field IDs for escalation
+        # Custom field IDs for escalation - ALL 7 FIELDS
         escalation_fields = {
             'ESCALATION_REASON': 'c6e0281e-9001-42d7-a265-8f5da6b71132',
             'ESCALATION_AI_SUMMARY': 'e9e831f2-b439-4067-8e88-6b715f4263b2', 
             'ESCALATION_STATUS': '8d784bd0-18e5-4db3-b45e-9a2900262e04',
             'ESCALATED_TO': '934811f1-239f-4d53-880c-3655571fd02e',
-            'ESCALATION_TIMESTAMP': '5ffd2b3e-b8dc-4bd0-819a-a3d4c3396a5f'
+            'ESCALATION_TIMESTAMP': '5ffd2b3e-b8dc-4bd0-819a-a3d4c3396a5f',
+            'SUPERVISOR_RESPONSE': 'a077ecc9-1a59-48af-b2cd-42a63f5a7f86',
+            'ESCALATION_RESOLVED_TIMESTAMP': 'c40bf1c4-7d33-4b2b-8765-0784cd88591a'
         }
+
+        # Get escalated_to from request (supervisor selection)
+        escalated_to = data.get('escalated_to', '')  # User ID or email
 
         try:
             # 1. Update task custom fields with escalation data
             custom_fields = [
                 {"id": escalation_fields['ESCALATION_REASON'], "value": escalation_reason},
                 {"id": escalation_fields['ESCALATION_AI_SUMMARY'], "value": ai_summary},
-                {"id": escalation_fields['ESCALATION_STATUS'], "value": 1},  # Assuming 1 = "Escalated"
-                {"id": escalation_fields['ESCALATION_TIMESTAMP'], "value": int(datetime.now().timestamp() * 1000)},
-                {"id": escalation_fields['ESCALATED_TO'], "value": 0}  # Default to first option for now
+                {"id": escalation_fields['ESCALATION_STATUS'], "value": "escalated"},  # Use string value for dropdown
+                {"id": escalation_fields['ESCALATION_TIMESTAMP'], "value": int(datetime.now().timestamp() * 1000)}
             ]
+            
+            # Add escalated_to if provided
+            if escalated_to:
+                custom_fields.append({"id": escalation_fields['ESCALATED_TO'], "value": escalated_to})
             
             # Update task with custom fields
             update_response = requests.put(
@@ -763,6 +771,112 @@ def escalate_task(task_id):
     except Exception as e:
         logger.error(f"Error escalating task {task_id}: {e}")
         return jsonify({"error": f"Failed to escalate task: {str(e)}"}), 500
+
+
+@app.route('/api/task-helper/supervisor-response/<task_id>', methods=['POST'])
+@login_required
+@rate_limiter.rate_limit(limit='10 per minute')
+def supervisor_response(task_id):
+    """
+    Handle supervisor response to an escalated task
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Request body must be JSON"}), 400
+
+        supervisor_response_text = data.get('response', '').strip()
+        
+        if not supervisor_response_text:
+            return jsonify({"error": "Supervisor response is required"}), 400
+
+        # Log supervisor response for audit
+        logger.info(f"Supervisor response for task {task_id} by {request.user.get('email')}")
+
+        # Get ClickUp API configuration
+        clickup_token = os.getenv('CLICKUP_API_KEY')
+        if not clickup_token:
+            logger.error("ClickUp API key not configured")
+            return jsonify({"error": "ClickUp integration not configured"}), 500
+
+        # Custom field IDs
+        escalation_fields = {
+            'ESCALATION_STATUS': '8d784bd0-18e5-4db3-b45e-9a2900262e04',
+            'SUPERVISOR_RESPONSE': 'a077ecc9-1a59-48af-b2cd-42a63f5a7f86',
+            'ESCALATION_RESOLVED_TIMESTAMP': 'c40bf1c4-7d33-4b2b-8765-0784cd88591a'
+        }
+
+        try:
+            # Update task custom fields with supervisor response
+            custom_fields = [
+                {"id": escalation_fields['SUPERVISOR_RESPONSE'], "value": supervisor_response_text},
+                {"id": escalation_fields['ESCALATION_STATUS'], "value": "resolved"},  # Update status to resolved
+                {"id": escalation_fields['ESCALATION_RESOLVED_TIMESTAMP'], "value": int(datetime.now().timestamp() * 1000)}
+            ]
+            
+            # Update task with custom fields
+            update_response = requests.put(
+                f"https://api.clickup.com/api/v2/task/{task_id}",
+                headers={
+                    "Authorization": clickup_token,
+                    "Content-Type": "application/json"
+                },
+                json={"custom_fields": custom_fields}
+            )
+            
+            if not update_response.ok:
+                logger.error(f"Failed to update task with supervisor response: {update_response.text}")
+                return jsonify({"error": "Failed to save supervisor response to ClickUp"}), 500
+
+            # Add resolution comment to task
+            resolution_comment = f"""✅ **ESCALATION RESOLVED**
+
+**Supervisor Response**: 
+{supervisor_response_text}
+
+**Resolved by**: {request.user.get('email')}
+**Resolution Time**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
+
+----
+*This resolution was recorded via Task Helper*"""
+
+            comment_response = requests.post(
+                f"https://api.clickup.com/api/v2/task/{task_id}/comment",
+                headers={
+                    "Authorization": clickup_token,
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "comment_text": resolution_comment,
+                    "notify_all": True
+                }
+            )
+            
+            if not comment_response.ok:
+                logger.warning(f"Failed to add resolution comment: {comment_response.text}")
+            
+            # Success response
+            response_data = {
+                "success": True,
+                "message": "Supervisor response recorded successfully",
+                "task_id": task_id,
+                "resolved_by": request.user.get('email'),
+                "resolution": {
+                    "response": supervisor_response_text,
+                    "timestamp": datetime.now().isoformat()
+                },
+                "clickup_updated": True
+            }
+            
+            return jsonify(response_data)
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"ClickUp API request failed: {e}")
+            return jsonify({"error": "Failed to communicate with ClickUp API"}), 500
+        
+    except Exception as e:
+        logger.error(f"Error recording supervisor response for task {task_id}: {e}")
+        return jsonify({"error": f"Failed to record supervisor response: {str(e)}"}), 500
 
 
 @app.route('/api/ai/generate-escalation-summary', methods=['POST'])
