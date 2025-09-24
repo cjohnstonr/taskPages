@@ -276,8 +276,23 @@
                 if (response.ok) {
                     const data = await response.json();
                     setAiSummary(data.summary);
+                    
+                    // Show warning if using fallback
+                    if (data.model_used === 'fallback' || data.model_used === 'emergency_fallback') {
+                        console.warn('AI generation failed, using fallback summary');
+                    }
                 } else {
-                    alert('Failed to generate AI summary');
+                    // Even on error, try to parse response for fallback summary
+                    try {
+                        const errorData = await response.json();
+                        if (errorData.summary) {
+                            setAiSummary(errorData.summary);
+                        } else {
+                            alert('Failed to generate AI summary');
+                        }
+                    } catch {
+                        alert('Failed to generate AI summary');
+                    }
                 }
             } catch (error) {
                 console.error('Error generating summary:', error);

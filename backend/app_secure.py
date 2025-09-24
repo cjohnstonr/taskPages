@@ -32,6 +32,12 @@ load_dotenv()
 
 # Configure OpenAI
 openai.api_key = os.getenv('OPENAI_API_KEY')
+if not openai.api_key:
+    logger.warning("OpenAI API key not found in environment variables")
+else:
+    # Mask the API key for logging
+    masked_key = f"{openai.api_key[:10]}...{openai.api_key[-10:]}" if len(openai.api_key) > 20 else "***"
+    logger.info(f"OpenAI API key loaded: {masked_key}")
 
 # Configure logging
 logging.basicConfig(
@@ -1012,25 +1018,48 @@ Please provide a concise escalation summary that:
 Format your response as a professional escalation summary."""
 
         try:
-            # Call OpenAI API
-            response = openai.ChatCompletion.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are a professional project manager creating escalation summaries."},
-                    {"role": "user", "content": ai_prompt}
-                ],
-                max_tokens=400,
-                temperature=0.7
-            )
+            # Check if OpenAI API key is configured
+            if not openai.api_key:
+                logger.error("OpenAI API key not configured")
+                raise Exception("OpenAI API key not configured")
             
-            ai_summary = response.choices[0].message.content.strip()
+            # Call OpenAI API - Try GPT-3.5-turbo first (more widely available)
+            try:
+                response = openai.ChatCompletion.create(
+                    model="gpt-3.5-turbo",  # Changed from gpt-4 to gpt-3.5-turbo for better availability
+                    messages=[
+                        {"role": "system", "content": "You are a professional project manager creating escalation summaries."},
+                        {"role": "user", "content": ai_prompt}
+                    ],
+                    max_tokens=400,
+                    temperature=0.7
+                )
+                
+                ai_summary = response.choices[0].message.content.strip()
+                model_used = "gpt-3.5-turbo"
+                
+            except Exception as e:
+                # If GPT-3.5 fails, try GPT-4 as fallback
+                logger.warning(f"GPT-3.5-turbo failed, trying GPT-4: {e}")
+                response = openai.ChatCompletion.create(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": "You are a professional project manager creating escalation summaries."},
+                        {"role": "user", "content": ai_prompt}
+                    ],
+                    max_tokens=400,
+                    temperature=0.7
+                )
+                
+                ai_summary = response.choices[0].message.content.strip()
+                model_used = "gpt-4"
             
             return jsonify({
                 "success": True,
                 "summary": ai_summary,
                 "generated_at": datetime.now().isoformat(),
                 "task_id": task_id,
-                "model_used": "gpt-4"
+                "model_used": model_used
             })
             
         except Exception as openai_error:
@@ -1068,7 +1097,32 @@ Format your response as a professional escalation summary."""
         
     except Exception as e:
         logger.error(f"Error generating AI summary: {e}")
-        return jsonify({"error": f"Failed to generate summary: {str(e)}"}), 500
+        
+        # Even if everything fails, provide a basic summary
+        try:
+            basic_summary = f"""**ESCALATION SUMMARY**
+
+**Task ID**: {data.get('task_id', 'Unknown')}
+
+**Issue Description**: {data.get('reason', 'No reason provided')}
+
+**Recommended Action**: This task has been escalated and requires immediate attention.
+
+**Priority**: High - Requires attention within 24 hours
+
+*Note: Summary generation encountered an error. Please review the task directly.*"""
+            
+            return jsonify({
+                "success": True,
+                "summary": basic_summary,
+                "generated_at": datetime.now().isoformat(),
+                "task_id": data.get('task_id', 'unknown'),
+                "model_used": "emergency_fallback",
+                "error": str(e)
+            })
+        except:
+            # Absolute last resort
+            return jsonify({"error": f"Failed to generate summary: {str(e)}"}), 500
 
 
 # =====================================================
