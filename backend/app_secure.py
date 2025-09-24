@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, request, jsonify, session, render_template
+import openai
 from flask_session import Session
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -28,6 +29,9 @@ from auth.security_middleware import SecurityMiddleware, RateLimiter
 
 # Load environment variables
 load_dotenv()
+
+# Configure OpenAI
+openai.api_key = os.getenv('OPENAI_API_KEY')
 
 # Configure logging
 logging.basicConfig(
@@ -650,34 +654,111 @@ def escalate_task(task_id):
         # Log escalation attempt for audit
         logger.info(f"Task escalation requested for {task_id} by {request.user.get('email')}")
 
-        # TODO: Add actual escalation logic here
-        # 1. Update task custom fields with escalation data
-        # 2. Add "escalated" tag to task  
-        # 3. Create notification/comment
-        # 4. Send notification (SMS/email/Slack)
-        
-        # For now, return success response
-        # In real implementation, you would:
-        # - Update ESCALATION_STATUS field to "escalated" 
-        # - Set ESCALATION_AI_SUMMARY field to ai_summary
-        # - Set ESCALATION_TIMESTAMP to current time
-        # - Add escalation comment to task
-        
-        response_data = {
-            "success": True,
-            "message": "Task escalated successfully",
-            "escalation_id": f"ESC-{task_id}-{int(datetime.now().timestamp())}",
-            "task_id": task_id,
-            "escalated_by": request.user.get('email'),
-            "escalation_data": {
-                "reason": escalation_reason,
-                "ai_summary": ai_summary,
-                "context": task_context,
-                "timestamp": datetime.now().isoformat()
-            }
+        # Get ClickUp API configuration
+        clickup_token = os.getenv('CLICKUP_API_KEY')
+        if not clickup_token:
+            logger.error("ClickUp API key not configured")
+            return jsonify({"error": "ClickUp integration not configured"}), 500
+
+        # Custom field IDs for escalation
+        escalation_fields = {
+            'ESCALATION_REASON': 'c6e0281e-9001-42d7-a265-8f5da6b71132',
+            'ESCALATION_AI_SUMMARY': 'e9e831f2-b439-4067-8e88-6b715f4263b2', 
+            'ESCALATION_STATUS': '8d784bd0-18e5-4db3-b45e-9a2900262e04',
+            'ESCALATED_TO': '934811f1-239f-4d53-880c-3655571fd02e',
+            'ESCALATION_TIMESTAMP': '5ffd2b3e-b8dc-4bd0-819a-a3d4c3396a5f'
         }
-        
-        return jsonify(response_data)
+
+        try:
+            # 1. Update task custom fields with escalation data
+            custom_fields = [
+                {"id": escalation_fields['ESCALATION_REASON'], "value": escalation_reason},
+                {"id": escalation_fields['ESCALATION_AI_SUMMARY'], "value": ai_summary},
+                {"id": escalation_fields['ESCALATION_STATUS'], "value": 1},  # Assuming 1 = "Escalated"
+                {"id": escalation_fields['ESCALATION_TIMESTAMP'], "value": int(datetime.now().timestamp() * 1000)},
+                {"id": escalation_fields['ESCALATED_TO'], "value": 0}  # Default to first option for now
+            ]
+            
+            # Update task with custom fields
+            update_response = requests.put(
+                f"https://api.clickup.com/api/v2/task/{task_id}",
+                headers={
+                    "Authorization": clickup_token,
+                    "Content-Type": "application/json"
+                },
+                json={"custom_fields": custom_fields}
+            )
+            
+            if not update_response.ok:
+                logger.error(f"Failed to update task custom fields: {update_response.text}")
+                return jsonify({"error": "Failed to save escalation to ClickUp"}), 500
+
+            # 2. Add escalation comment to task
+            escalation_comment = f"""🚨 **TASK ESCALATED**
+
+**Reason**: {escalation_reason}
+
+**AI Summary**: 
+{ai_summary}
+
+**Escalated by**: {request.user.get('email')}
+**Timestamp**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
+
+---
+*This escalation was generated via Task Helper*"""
+
+            comment_response = requests.post(
+                f"https://api.clickup.com/api/v2/task/{task_id}/comment",
+                headers={
+                    "Authorization": clickup_token,
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "comment_text": escalation_comment,
+                    "notify_all": True
+                }
+            )
+            
+            if not comment_response.ok:
+                logger.warning(f"Failed to add escalation comment: {comment_response.text}")
+            
+            # 3. Add "escalated" tag to task (if it doesn't exist)
+            try:
+                tag_response = requests.post(
+                    f"https://api.clickup.com/api/v2/task/{task_id}/tag/escalated",
+                    headers={
+                        "Authorization": clickup_token,
+                        "Content-Type": "application/json"
+                    }
+                )
+                # Tag addition may fail if tag doesn't exist or task already has it - that's OK
+            except Exception as tag_error:
+                logger.warning(f"Failed to add escalated tag: {tag_error}")
+
+            # Success response with escalation details
+            escalation_id = f"ESC-{task_id}-{int(datetime.now().timestamp())}"
+            
+            response_data = {
+                "success": True,
+                "message": "Task escalated successfully and saved to ClickUp",
+                "escalation_id": escalation_id,
+                "task_id": task_id,
+                "escalated_by": request.user.get('email'),
+                "escalation_data": {
+                    "reason": escalation_reason,
+                    "ai_summary": ai_summary,
+                    "context": task_context,
+                    "timestamp": datetime.now().isoformat()
+                },
+                "clickup_updated": True,
+                "comment_added": comment_response.ok
+            }
+            
+            return jsonify(response_data)
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"ClickUp API request failed: {e}")
+            return jsonify({"error": "Failed to communicate with ClickUp API"}), 500
         
     except Exception as e:
         logger.error(f"Error escalating task {task_id}: {e}")
@@ -706,41 +787,93 @@ def generate_escalation_summary():
         # Log AI summary generation for audit
         logger.info(f"AI summary generation requested for task {task_id} by {request.user.get('email')}")
 
-        # TODO: Implement actual AI integration here
-        # This is a placeholder that generates a mock summary
-        # In real implementation, you would:
-        # 1. Format task context for AI prompt
-        # 2. Call OpenAI API with structured prompt
-        # 3. Process and validate AI response
-        # 4. Return formatted summary
+        # Format task context for AI prompt
+        task_info = context.get('task', {})
+        parent_task_info = context.get('parent_task', {})
+        subtasks_info = context.get('subtasks', [])
         
-        # Mock AI summary for now
-        mock_summary = f"""**ESCALATION SUMMARY**
+        # Build comprehensive context for AI
+        ai_prompt = f"""You are an expert project manager helping to prioritize task escalations. 
 
-**Task**: {context.get('task', {}).get('name', 'Unknown Task')} ({task_id})
+ESCALATION REQUEST:
+- Task: {task_info.get('name', 'Unknown Task')} (ID: {task_id})
+- Escalated by: {request.user.get('email')}
+- Reason for escalation: {reason}
+
+TASK CONTEXT:
+- Status: {task_info.get('status', {}).get('status', 'Unknown')}
+- Priority: {task_info.get('priority', {}).get('priority', 'None')}
+- Assignees: {', '.join([a.get('username', 'Unknown') for a in task_info.get('assignees', [])])}
+- Due Date: {task_info.get('due_date', 'Not set')}
+- Description: {(task_info.get('description', 'No description')[:200] + '...' if len(task_info.get('description', '')) > 200 else task_info.get('description', 'No description'))}
+
+HIERARCHY CONTEXT:
+- Parent Task: {parent_task_info.get('name', 'None')}
+- Subtasks: {len(subtasks_info)} total
+- Completed Subtasks: {len([s for s in subtasks_info if s.get('status', {}).get('type', '') == 'closed'])}
+
+Please provide a concise escalation summary that:
+1. Clearly explains the issue and why it needs attention
+2. Provides relevant context about the task and its place in the project
+3. Suggests a priority level and recommended timeline for resolution
+4. Keeps the summary under 300 words
+
+Format your response as a professional escalation summary."""
+
+        try:
+            # Call OpenAI API
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "You are a professional project manager creating escalation summaries."},
+                    {"role": "user", "content": ai_prompt}
+                ],
+                max_tokens=400,
+                temperature=0.7
+            )
+            
+            ai_summary = response.choices[0].message.content.strip()
+            
+            return jsonify({
+                "success": True,
+                "summary": ai_summary,
+                "generated_at": datetime.now().isoformat(),
+                "task_id": task_id,
+                "model_used": "gpt-4"
+            })
+            
+        except Exception as openai_error:
+            logger.error(f"OpenAI API error: {openai_error}")
+            
+            # Fallback to structured summary if OpenAI fails
+            fallback_summary = f"""**ESCALATION SUMMARY**
+
+**Task**: {task_info.get('name', 'Unknown Task')} ({task_id})
 **Escalated by**: {request.user.get('email')}
 
 **Issue Description**: {reason}
 
 **Task Context**:
-- Status: {context.get('task', {}).get('status', {}).get('status', 'Unknown')}
-- Assignees: {', '.join([a.get('username', 'Unknown') for a in context.get('task', {}).get('assignees', [])])}
-- Parent Task: {context.get('parent_task', {}).get('name', 'None')}
-- Subtasks: {len(context.get('subtasks', []))} total
+- Status: {task_info.get('status', {}).get('status', 'Unknown')}
+- Priority: {task_info.get('priority', {}).get('priority', 'None')}
+- Assignees: {', '.join([a.get('username', 'Unknown') for a in task_info.get('assignees', [])])}
+- Parent Task: {parent_task_info.get('name', 'None')}
+- Subtasks: {len(subtasks_info)} total, {len([s for s in subtasks_info if s.get('status', {}).get('type', '') == 'closed'])} completed
 
 **Recommended Action**: Review task context and provide guidance on next steps.
 
 **Priority**: Moderate - Requires attention within 24 hours
 
-*This summary was generated by AI to help prioritize and understand the escalation context.*"""
-
-        return jsonify({
-            "success": True,
-            "summary": mock_summary,
-            "generated_at": datetime.now().isoformat(),
-            "task_id": task_id,
-            "model_used": "mock-gpt-4" # In real implementation: "gpt-4" or similar
-        })
+*Note: AI summary generation failed, using fallback format.*"""
+            
+            return jsonify({
+                "success": True,
+                "summary": fallback_summary,
+                "generated_at": datetime.now().isoformat(),
+                "task_id": task_id,
+                "model_used": "fallback",
+                "ai_error": str(openai_error)
+            })
         
     except Exception as e:
         logger.error(f"Error generating AI summary: {e}")

@@ -22,3 +22,6 @@ werkzeug==3.0.1
 
 # Utilities
 python-dateutil==2.8.2
+
+# AI Integration
+openai==0.28.1
