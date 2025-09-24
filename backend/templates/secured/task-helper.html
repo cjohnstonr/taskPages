@@ -127,6 +127,7 @@
 <div id="root"></div>
 
 <script type="text/babel">
+{% raw %}
     const { useState, useEffect, useMemo } = React;
 
     // Configuration - Using Python backend
@@ -1033,6 +1034,8 @@
 
     // Render the app
     ReactDOM.render(<TaskHelperApp />, document.getElementById('root'));
+
+{% endraw %}
 </script>
 </body>
 </html>
