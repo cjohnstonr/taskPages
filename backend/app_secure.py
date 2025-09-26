@@ -1004,7 +1004,16 @@ def generate_escalation_summary():
             return jsonify({"error": "task_id and reason are required"}), 400
 
         # Log AI summary generation for audit
-        user_email = session.get('user', {}).get('email', 'Unknown') if session.get('user') else 'Unknown'
+        # Safely extract user email with multiple fallbacks
+        try:
+            user_info = session.get('user', {})
+            if user_info and isinstance(user_info, dict):
+                user_email = user_info.get('email', 'Unknown')
+            else:
+                user_email = 'Unknown'
+        except Exception:
+            user_email = 'Unknown'
+        
         logger.info(f"AI summary generation requested for task {task_id} by {user_email}")
 
         # Format task context for AI prompt
@@ -1062,14 +1071,14 @@ ESCALATION REQUEST:
 TASK CONTEXT:
 - Status: {status_text}
 - Priority: {priority_text}
-- Assignees: {', '.join([a.get('username', 'Unknown') for a in task_info.get('assignees', [])])}
+- Assignees: {', '.join([a.get('username', 'Unknown') for a in task_info.get('assignees', []) if a and isinstance(a, dict)])}
 - Due Date: {task_info.get('due_date', 'Not set')}
 - Description: {(task_info.get('description', 'No description')[:200] + '...' if len(task_info.get('description', '')) > 200 else task_info.get('description', 'No description'))}
 
 HIERARCHY CONTEXT:
 - Parent Task: {parent_task_info.get('name', 'None')}
 - Subtasks: {len(subtasks_info)} total
-- Completed Subtasks: {len([s for s in subtasks_info if s.get('status') and isinstance(s.get('status'), dict) and s.get('status').get('type', '') == 'closed'])}
+- Completed Subtasks: {len([s for s in subtasks_info if s.get('status') and isinstance(s.get('status'), dict) and s.get('status', {}).get('type', '') == 'closed'])}
 
 Please provide a concise escalation summary that:
 1. Clearly explains the issue and why it needs attention
