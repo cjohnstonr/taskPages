@@ -273,26 +273,16 @@
                     })
                 });
                 
-                if (response.ok) {
-                    const data = await response.json();
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
                     setAiSummary(data.summary);
-                    
-                    // Show warning if using fallback
-                    if (data.model_used === 'fallback' || data.model_used === 'emergency_fallback') {
-                        console.warn('AI generation failed, using fallback summary');
-                    }
                 } else {
-                    // Even on error, try to parse response for fallback summary
-                    try {
-                        const errorData = await response.json();
-                        if (errorData.summary) {
-                            setAiSummary(errorData.summary);
-                        } else {
-                            alert('Failed to generate AI summary');
-                        }
-                    } catch {
-                        alert('Failed to generate AI summary');
-                    }
+                    // Handle error response
+                    const errorMessage = data.error || 'Failed to generate AI summary';
+                    const technicalError = data.technical_error ? `\n\nTechnical details: ${data.technical_error}` : '';
+                    alert(errorMessage + technicalError);
+                    console.error('AI generation error:', data);
                 }
             } catch (error) {
                 console.error('Error generating summary:', error);

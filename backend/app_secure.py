@@ -792,7 +792,7 @@ def escalate_task(task_id):
 **AI Summary**: 
 {ai_summary}
 
-**Escalated by**: {request.user.get('email')}
+**Escalated by**: {session.get('user', {}).get('email', 'Unknown')}
 **Timestamp**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
 
 ---
@@ -1023,26 +1023,10 @@ Format your response as a professional escalation summary."""
                 logger.error("OpenAI API key not configured")
                 raise Exception("OpenAI API key not configured")
             
-            # Call OpenAI API - Try GPT-3.5-turbo first (more widely available)
+            # Call OpenAI API - Try GPT-4 first
             try:
                 response = openai.ChatCompletion.create(
-                    model="gpt-3.5-turbo",  # Changed from gpt-4 to gpt-3.5-turbo for better availability
-                    messages=[
-                        {"role": "system", "content": "You are a professional project manager creating escalation summaries."},
-                        {"role": "user", "content": ai_prompt}
-                    ],
-                    max_tokens=400,
-                    temperature=0.7
-                )
-                
-                ai_summary = response.choices[0].message.content.strip()
-                model_used = "gpt-3.5-turbo"
-                
-            except Exception as e:
-                # If GPT-3.5 fails, try GPT-4 as fallback
-                logger.warning(f"GPT-3.5-turbo failed, trying GPT-4: {e}")
-                response = openai.ChatCompletion.create(
-                    model="gpt-4",
+                    model="gpt-4",  # Using GPT-4 as required
                     messages=[
                         {"role": "system", "content": "You are a professional project manager creating escalation summaries."},
                         {"role": "user", "content": ai_prompt}
@@ -1053,6 +1037,22 @@ Format your response as a professional escalation summary."""
                 
                 ai_summary = response.choices[0].message.content.strip()
                 model_used = "gpt-4"
+                
+            except Exception as e:
+                # If GPT-4 fails, try GPT-4-turbo-preview as fallback
+                logger.warning(f"GPT-4 failed, trying GPT-4-turbo-preview: {e}")
+                response = openai.ChatCompletion.create(
+                    model="gpt-4-turbo-preview",
+                    messages=[
+                        {"role": "system", "content": "You are a professional project manager creating escalation summaries."},
+                        {"role": "user", "content": ai_prompt}
+                    ],
+                    max_tokens=400,
+                    temperature=0.7
+                )
+                
+                ai_summary = response.choices[0].message.content.strip()
+                model_used = "gpt-4-turbo-preview"
             
             return jsonify({
                 "success": True,
@@ -1065,64 +1065,23 @@ Format your response as a professional escalation summary."""
         except Exception as openai_error:
             logger.error(f"OpenAI API error: {openai_error}")
             
-            # Fallback to structured summary if OpenAI fails
-            fallback_summary = f"""**ESCALATION SUMMARY**
-
-**Task**: {task_info.get('name', 'Unknown Task')} ({task_id})
-**Escalated by**: {request.user.get('email')}
-
-**Issue Description**: {reason}
-
-**Task Context**:
-- Status: {task_info.get('status', {}).get('status', 'Unknown')}
-- Priority: {task_info.get('priority', {}).get('priority', 'None')}
-- Assignees: {', '.join([a.get('username', 'Unknown') for a in task_info.get('assignees', [])])}
-- Parent Task: {parent_task_info.get('name', 'None')}
-- Subtasks: {len(subtasks_info)} total, {len([s for s in subtasks_info if s.get('status', {}).get('type', '') == 'closed'])} completed
-
-**Recommended Action**: Review task context and provide guidance on next steps.
-
-**Priority**: Moderate - Requires attention within 24 hours
-
-*Note: AI summary generation failed, using fallback format.*"""
-            
+            # Return error - no mock data
             return jsonify({
-                "success": True,
-                "summary": fallback_summary,
-                "generated_at": datetime.now().isoformat(),
-                "task_id": task_id,
-                "model_used": "fallback",
-                "ai_error": str(openai_error)
-            })
+                "success": False,
+                "error": "AI service temporarily unavailable. Please try again later.",
+                "technical_error": str(openai_error),
+                "task_id": task_id
+            }), 503
         
     except Exception as e:
         logger.error(f"Error generating AI summary: {e}")
         
-        # Even if everything fails, provide a basic summary
-        try:
-            basic_summary = f"""**ESCALATION SUMMARY**
-
-**Task ID**: {data.get('task_id', 'Unknown')}
-
-**Issue Description**: {data.get('reason', 'No reason provided')}
-
-**Recommended Action**: This task has been escalated and requires immediate attention.
-
-**Priority**: High - Requires attention within 24 hours
-
-*Note: Summary generation encountered an error. Please review the task directly.*"""
-            
-            return jsonify({
-                "success": True,
-                "summary": basic_summary,
-                "generated_at": datetime.now().isoformat(),
-                "task_id": data.get('task_id', 'unknown'),
-                "model_used": "emergency_fallback",
-                "error": str(e)
-            })
-        except:
-            # Absolute last resort
-            return jsonify({"error": f"Failed to generate summary: {str(e)}"}), 500
+        # Return error - no mock data
+        return jsonify({
+            "success": False,
+            "error": "Failed to generate AI summary. Please try again later.",
+            "technical_error": str(e)
+        }), 500
 
 
 # =====================================================
