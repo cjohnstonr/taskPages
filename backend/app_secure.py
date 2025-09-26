@@ -758,31 +758,42 @@ def escalate_task(task_id):
         escalated_to = data.get('escalated_to', '')  # User ID or email
 
         try:
-            # 1. Update task custom fields with escalation data
-            custom_fields = [
-                {"id": escalation_fields['ESCALATION_REASON'], "value": escalation_reason},
-                {"id": escalation_fields['ESCALATION_AI_SUMMARY'], "value": ai_summary},
-                {"id": escalation_fields['ESCALATION_STATUS'], "value": "Escalated"},  # Set to Escalated (dropdown option)
-                {"id": escalation_fields['ESCALATION_TIMESTAMP'], "value": int(datetime.now().timestamp() * 1000)}
+            # 1. Update task custom fields with escalation data - ONE AT A TIME
+            headers = {
+                "Authorization": clickup_token,
+                "Content-Type": "application/json"
+            }
+            
+            # Set each field individually using the correct API endpoint
+            fields_to_update = [
+                (escalation_fields['ESCALATION_REASON'], {"value": escalation_reason}),
+                (escalation_fields['ESCALATION_AI_SUMMARY'], {"value": ai_summary}),
+                (escalation_fields['ESCALATION_STATUS'], {"value": "8dc15846-e8c7-43a8-b7b2-1e1a0e1d6497"}),  # UUID for 'Escalated'
+                (escalation_fields['ESCALATION_TIMESTAMP'], {
+                    "value": int(datetime.now().timestamp() * 1000),
+                    "value_options": {"time": True}  # Include time for date field
+                })
             ]
             
             # Add escalated_to if provided
             if escalated_to:
-                custom_fields.append({"id": escalation_fields['ESCALATED_TO'], "value": escalated_to})
+                fields_to_update.append((escalation_fields['ESCALATED_TO'], {"value": escalated_to}))
             
-            # Update task with custom fields
-            update_response = requests.put(
-                f"https://api.clickup.com/api/v2/task/{task_id}",
-                headers={
-                    "Authorization": clickup_token,
-                    "Content-Type": "application/json"
-                },
-                json={"custom_fields": custom_fields}
-            )
+            # Update each field individually
+            for field_id, field_data in fields_to_update:
+                field_response = requests.post(
+                    f"https://api.clickup.com/api/v2/task/{task_id}/field/{field_id}",
+                    headers=headers,
+                    json=field_data
+                )
+                
+                if not field_response.ok:
+                    logger.error(f"Failed to update field {field_id}: {field_response.text}")
+                    # Continue trying other fields even if one fails
+                else:
+                    logger.info(f"Successfully updated field {field_id}")
             
-            if not update_response.ok:
-                logger.error(f"Failed to update task custom fields: {update_response.text}")
-                return jsonify({"error": "Failed to save escalation to ClickUp"}), 500
+            # All fields attempted, continue with the rest
 
             # 2. Add escalation comment to task
             escalation_comment = f"""🚨 **TASK ESCALATED**
@@ -890,26 +901,37 @@ def supervisor_response(task_id):
         }
 
         try:
-            # Update task custom fields with supervisor response
-            custom_fields = [
-                {"id": escalation_fields['SUPERVISOR_RESPONSE'], "value": supervisor_response_text},
-                {"id": escalation_fields['ESCALATION_STATUS'], "value": "Resolved"},  # Update status to Resolved (dropdown option)
-                {"id": escalation_fields['ESCALATION_RESOLVED_TIMESTAMP'], "value": int(datetime.now().timestamp() * 1000)}
+            # Update task custom fields with supervisor response - ONE AT A TIME
+            headers = {
+                "Authorization": clickup_token,
+                "Content-Type": "application/json"
+            }
+            
+            # Set each field individually using the correct API endpoint
+            fields_to_update = [
+                (escalation_fields['SUPERVISOR_RESPONSE'], {"value": supervisor_response_text}),
+                (escalation_fields['ESCALATION_STATUS'], {"value": "cbf82936-5488-4612-93a7-f8161071b0eb"}),  # UUID for 'Resolved'
+                (escalation_fields['ESCALATION_RESOLVED_TIMESTAMP'], {
+                    "value": int(datetime.now().timestamp() * 1000),
+                    "value_options": {"time": True}  # Include time for date field
+                })
             ]
             
-            # Update task with custom fields
-            update_response = requests.put(
-                f"https://api.clickup.com/api/v2/task/{task_id}",
-                headers={
-                    "Authorization": clickup_token,
-                    "Content-Type": "application/json"
-                },
-                json={"custom_fields": custom_fields}
-            )
+            # Update each field individually
+            for field_id, field_data in fields_to_update:
+                field_response = requests.post(
+                    f"https://api.clickup.com/api/v2/task/{task_id}/field/{field_id}",
+                    headers=headers,
+                    json=field_data
+                )
+                
+                if not field_response.ok:
+                    logger.error(f"Failed to update field {field_id}: {field_response.text}")
+                    # Continue trying other fields even if one fails
+                else:
+                    logger.info(f"Successfully updated field {field_id}")
             
-            if not update_response.ok:
-                logger.error(f"Failed to update task with supervisor response: {update_response.text}")
-                return jsonify({"error": "Failed to save supervisor response to ClickUp"}), 500
+            # All fields attempted, continue with the rest
 
             # Add resolution comment to task
             resolution_comment = f"""✅ **ESCALATION RESOLVED**
