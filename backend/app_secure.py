@@ -762,7 +762,7 @@ def escalate_task(task_id):
             custom_fields = [
                 {"id": escalation_fields['ESCALATION_REASON'], "value": escalation_reason},
                 {"id": escalation_fields['ESCALATION_AI_SUMMARY'], "value": ai_summary},
-                {"id": escalation_fields['ESCALATION_STATUS'], "value": "pending"},  # Set to pending until supervisor responds
+                {"id": escalation_fields['ESCALATION_STATUS'], "value": "Escalated"},  # Set to Escalated (dropdown option)
                 {"id": escalation_fields['ESCALATION_TIMESTAMP'], "value": int(datetime.now().timestamp() * 1000)}
             ]
             
@@ -893,7 +893,7 @@ def supervisor_response(task_id):
             # Update task custom fields with supervisor response
             custom_fields = [
                 {"id": escalation_fields['SUPERVISOR_RESPONSE'], "value": supervisor_response_text},
-                {"id": escalation_fields['ESCALATION_STATUS'], "value": "resolved"},  # Update status to resolved
+                {"id": escalation_fields['ESCALATION_STATUS'], "value": "Resolved"},  # Update status to Resolved (dropdown option)
                 {"id": escalation_fields['ESCALATION_RESOLVED_TIMESTAMP'], "value": int(datetime.now().timestamp() * 1000)}
             ]
             
