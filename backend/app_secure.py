@@ -325,7 +325,7 @@ def initialize_wait_node(task_id):
     Returns root task, wait task, and all subtasks in a single response
     """
     try:
-        logger.info(f"Initializing wait node for task: {task_id} by user: {request.user.get('email')}")
+        logger.info(f"Initializing wait node for task: {task_id} by user: {session.get('user', {}).get('email', 'Unknown')}")
         
         # Find process library root and parent
         result = clickup_service.find_process_library_root(task_id)
@@ -380,7 +380,7 @@ def approve_task(task_id):
     """
     try:
         approval_data = request.json
-        logger.info(f"Processing approval for task {task_id} by user: {request.user.get('email')}")
+        logger.info(f"Processing approval for task {task_id} by user: {session.get('user', {}).get('email', 'Unknown')}")
         
         if not approval_data:
             return jsonify({"error": "No approval data provided"}), 400
@@ -427,7 +427,7 @@ def approve_task(task_id):
         verified_task = clickup_service.get_task(task_id, custom_task_ids=True)
         
         # Log approval action for audit trail
-        logger.info(f"Approval completed for task {task_id} by {request.user.get('email')}")
+        logger.info(f"Approval completed for task {task_id} by {session.get('user', {}).get('email', 'Unknown')}")
         
         return jsonify({
             "success": True,
@@ -533,7 +533,7 @@ def update_field(task_id, field_id):
         result = clickup_service.update_custom_field(task_id, field_id, data['value'])
         
         # Log field update for audit
-        logger.info(f"Field {field_id} updated on task {task_id} by {request.user.get('email')}")
+        logger.info(f"Field {field_id} updated on task {task_id} by {session.get('user', {}).get('email', 'Unknown')}")
         
         return jsonify(result)
     
@@ -580,7 +580,7 @@ def update_single_custom_field(task_id):
         response = requests.post(url, headers=headers, params=params, json=payload)
         response.raise_for_status()
         
-        logger.info(f"Updated field {field_id} on task {task_id} by {request.user.get('email')}")
+        logger.info(f"Updated field {field_id} on task {task_id} by {session.get('user', {}).get('email', 'Unknown')}")
         
         return jsonify({
             "success": True,
@@ -618,7 +618,7 @@ def delete_task(task_id):
         response = requests.delete(url, headers=headers, params=params)
         response.raise_for_status()
         
-        logger.info(f"Deleted task {task_id} by {request.user.get('email')}")
+        logger.info(f"Deleted task {task_id} by {session.get('user', {}).get('email', 'Unknown')}")
         
         return jsonify({
             "success": True,
@@ -735,7 +735,7 @@ def escalate_task(task_id):
             return jsonify({"error": "Escalation reason is required"}), 400
 
         # Log escalation attempt for audit
-        logger.info(f"Task escalation requested for {task_id} by {request.user.get('email')}")
+        logger.info(f"Task escalation requested for {task_id} by {session.get('user', {}).get('email', 'Unknown')}")
 
         # Get ClickUp API configuration
         clickup_token = os.getenv('CLICKUP_API_KEY')
@@ -834,7 +834,7 @@ def escalate_task(task_id):
                 "message": "Task escalated successfully and saved to ClickUp",
                 "escalation_id": escalation_id,
                 "task_id": task_id,
-                "escalated_by": request.user.get('email'),
+                "escalated_by": session.get('user', {}).get('email', 'Unknown'),
                 "escalation_data": {
                     "reason": escalation_reason,
                     "ai_summary": ai_summary,
@@ -874,7 +874,7 @@ def supervisor_response(task_id):
             return jsonify({"error": "Supervisor response is required"}), 400
 
         # Log supervisor response for audit
-        logger.info(f"Supervisor response for task {task_id} by {request.user.get('email')}")
+        logger.info(f"Supervisor response for task {task_id} by {session.get('user', {}).get('email', 'Unknown')}")
 
         # Get ClickUp API configuration
         clickup_token = os.getenv('CLICKUP_API_KEY')
@@ -917,7 +917,7 @@ def supervisor_response(task_id):
 **Supervisor Response**: 
 {supervisor_response_text}
 
-**Resolved by**: {request.user.get('email')}
+**Resolved by**: {session.get('user', {}).get('email', 'Unknown')}
 **Resolution Time**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
 
 ----
@@ -943,7 +943,7 @@ def supervisor_response(task_id):
                 "success": True,
                 "message": "Supervisor response recorded successfully",
                 "task_id": task_id,
-                "resolved_by": request.user.get('email'),
+                "resolved_by": session.get('user', {}).get('email', 'Unknown'),
                 "resolution": {
                     "response": supervisor_response_text,
                     "timestamp": datetime.now().isoformat()
@@ -982,7 +982,7 @@ def generate_escalation_summary():
             return jsonify({"error": "task_id and reason are required"}), 400
 
         # Log AI summary generation for audit
-        logger.info(f"AI summary generation requested for task {task_id} by {request.user.get('email')}")
+        logger.info(f"AI summary generation requested for task {task_id} by {session.get('user', {}).get('email', 'Unknown')}")
 
         # Format task context for AI prompt
         task_info = context.get('task', {})
@@ -994,7 +994,7 @@ def generate_escalation_summary():
 
 ESCALATION REQUEST:
 - Task: {task_info.get('name', 'Unknown Task')} (ID: {task_id})
-- Escalated by: {request.user.get('email')}
+- Escalated by: {session.get('user', {}).get('email', 'Unknown')}
 - Reason for escalation: {reason}
 
 TASK CONTEXT:
@@ -1197,7 +1197,7 @@ def serve_wait_node_v2():
     This ensures the HTML is never sent without authentication
     """
     # Log page access for security audit
-    logger.info(f"Secure page access: wait-node-v2 by {request.user.get('email')}")
+    logger.info(f"Secure page access: wait-node-v2 by {session.get('user', {}).get('email', 'Unknown')}")
     
     # Render the template - query parameters are automatically available in the template
     return render_template('secured/wait-node-v2.html')
@@ -1212,7 +1212,7 @@ def serve_wait_node_editable():
     OAuth protected page for editing Process Library steps
     """
     # Log page access for security audit
-    logger.info(f"Secure page access: wait-node-editable by {request.user.get('email')}")
+    logger.info(f"Secure page access: wait-node-editable by {session.get('user', {}).get('email', 'Unknown')}")
     
     # Render the editable template - query parameters are automatically available
     return render_template('secured/wait-node-editable.html')
@@ -1227,7 +1227,7 @@ def serve_task_helper():
     OAuth protected page for team task escalation workflow
     """
     # Log page access for security audit
-    logger.info(f"Secure page access: task-helper by {request.user.get('email')}")
+    logger.info(f"Secure page access: task-helper by {session.get('user', {}).get('email', 'Unknown')}")
     
     # Render the task helper template - query parameters are automatically available
     return render_template('secured/task-helper.html')
@@ -1242,7 +1242,7 @@ def serve_wait_node():
     Legacy version - consider using wait-node-v2
     """
     # Log page access for security audit
-    logger.info(f"Secure page access: wait-node by {request.user.get('email')}")
+    logger.info(f"Secure page access: wait-node by {session.get('user', {}).get('email', 'Unknown')}")
     
     return render_template('secured/wait-node.html')
 
