@@ -55,11 +55,44 @@
         ESCALATION_RESOLVED_TIMESTAMP: 'c40bf1c4-7d33-4b2b-8765-0784cd88591a'
     };
 
+    // Dropdown UUID mapping for ESCALATION_STATUS
+    const ESCALATION_STATUS_VALUES = {
+        'ESCALATED': '8dc15846-e8c7-43a8-b7b2-1e1a0e1d6497',
+        'RESOLVED': 'cbf82936-5488-4612-93a7-f8161071b0eb'
+    };
+
+    // Helper to resolve dropdown value to readable value
+    function getDropdownValue(field) {
+        if (!field || field.value === null || field.value === undefined) return null;
+        
+        // Special handling for ESCALATION_STATUS dropdown
+        if (field.id === FIELD_IDS.ESCALATION_STATUS) {
+            // ClickUp stores dropdown values as orderindex integers
+            // Based on the field structure: 0="Not Escalated", 1="Escalated", 2="Resolved"
+            if (field.value === 0) return 'NOT_ESCALATED';
+            if (field.value === 1) return 'ESCALATED';
+            if (field.value === 2) return 'RESOLVED';
+            
+            // Fallback: check for UUID values (in case API changes)
+            if (field.value === ESCALATION_STATUS_VALUES.ESCALATED) return 'ESCALATED';
+            if (field.value === ESCALATION_STATUS_VALUES.RESOLVED) return 'RESOLVED';
+        }
+        
+        return field.value; // fallback to raw value
+    }
+
     // Helper to get custom field value
     function getCustomField(task, fieldId) {
         if (!task?.custom_fields) return null;
         const field = task.custom_fields.find(f => f.id === fieldId);
         return field?.value || null;
+    }
+
+    // Helper to get escalation status as readable string
+    function getEscalationStatus(task) {
+        if (!task?.custom_fields) return null;
+        const field = task.custom_fields.find(f => f.id === FIELD_IDS.ESCALATION_STATUS);
+        return getDropdownValue(field);
     }
 
     // Helper to get non-empty custom fields
@@ -240,13 +273,42 @@
         const escalationTime = getCustomField(task, FIELD_IDS.ESCALATION_TIMESTAMP);
         const resolvedTime = getCustomField(task, FIELD_IDS.ESCALATION_RESOLVED_TIMESTAMP);
         
-        // Determine escalation state
-        const isEscalated = reason || summary || (status && status !== 'not_escalated');
-        const isResolved = supervisorResponse || (status === 'resolved');
+        // Determine escalation state using proper UUID mapping
+        const escalationStatus = getEscalationStatus(task);
+        const isEscalated = escalationStatus === 'ESCALATED' || reason || summary;
+        const isResolved = escalationStatus === 'RESOLVED' || supervisorResponse;
         const isAwaitingResponse = isEscalated && !isResolved;
         
-        // TODO: Check if current user is supervisor
-        const isSupervisor = false; // This should be determined from user context
+        // Check if current user is supervisor
+        const [userRole, setUserRole] = useState(null);
+        const [roleLoading, setRoleLoading] = useState(true);
+
+        useEffect(() => {
+            checkUserRole();
+        }, []);
+
+        const checkUserRole = async () => {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/user/role`, {
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    setUserRole(data);
+                } else {
+                    console.error('Failed to fetch user role');
+                    setUserRole({ role: 'user', is_supervisor: false });
+                }
+            } catch (error) {
+                console.error('Error checking user role:', error);
+                setUserRole({ role: 'user', is_supervisor: false });
+            } finally {
+                setRoleLoading(false);
+            }
+        };
+
+        const isSupervisor = userRole?.is_supervisor || false;
         
         // Generate AI Summary
         const generateSummary = async () => {

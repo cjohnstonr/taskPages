@@ -768,7 +768,7 @@ def escalate_task(task_id):
             fields_to_update = [
                 (escalation_fields['ESCALATION_REASON'], {"value": escalation_reason}),
                 (escalation_fields['ESCALATION_AI_SUMMARY'], {"value": ai_summary}),
-                (escalation_fields['ESCALATION_STATUS'], {"value": "8dc15846-e8c7-43a8-b7b2-1e1a0e1d6497"}),  # UUID for 'Escalated'
+                (escalation_fields['ESCALATION_STATUS'], {"value": 1}),  # orderindex 1 = 'Escalated'
                 (escalation_fields['ESCALATION_TIMESTAMP'], {
                     "value": int(datetime.now().timestamp() * 1000),
                     "value_options": {"time": True}  # Include time for date field
@@ -910,7 +910,7 @@ def supervisor_response(task_id):
             # Set each field individually using the correct API endpoint
             fields_to_update = [
                 (escalation_fields['SUPERVISOR_RESPONSE'], {"value": supervisor_response_text}),
-                (escalation_fields['ESCALATION_STATUS'], {"value": "cbf82936-5488-4612-93a7-f8161071b0eb"}),  # UUID for 'Resolved'
+                (escalation_fields['ESCALATION_STATUS'], {"value": 2}),  # orderindex 2 = 'Resolved'
                 (escalation_fields['ESCALATION_RESOLVED_TIMESTAMP'], {
                     "value": int(datetime.now().timestamp() * 1000),
                     "value_options": {"time": True}  # Include time for date field
@@ -1329,6 +1329,37 @@ def internal_error(e):
     """Handle 500 errors"""
     logger.error(f"Internal server error: {e}")
     return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route('/api/user/role', methods=['GET'])
+@login_required
+def get_user_role():
+    """Get user role for supervisor detection"""
+    try:
+        # For now, implement basic supervisor detection
+        # This can be enhanced with proper role management later
+        user_email = session.get('user', {}).get('email', '')
+        
+        # Simple supervisor detection - can be made more sophisticated
+        is_supervisor = any([
+            'supervisor' in user_email.lower(),
+            'manager' in user_email.lower(),
+            'admin' in user_email.lower(),
+            # Add more supervisor email patterns as needed
+            user_email.endswith('@supervisors.company.com'),  # Example domain
+        ])
+        
+        logger.info(f"User role check - Email: {user_email}, Is supervisor: {is_supervisor}")
+        
+        return jsonify({
+            'role': 'supervisor' if is_supervisor else 'user',
+            'user_email': user_email,
+            'is_supervisor': is_supervisor
+        })
+        
+    except Exception as e:
+        logger.error(f"Error checking user role: {e}")
+        return jsonify({'error': 'Failed to check user role'}), 500
 
 
 if __name__ == '__main__':
