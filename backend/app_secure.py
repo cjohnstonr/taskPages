@@ -1004,7 +1004,8 @@ def generate_escalation_summary():
             return jsonify({"error": "task_id and reason are required"}), 400
 
         # Log AI summary generation for audit
-        logger.info(f"AI summary generation requested for task {task_id} by {session.get('user', {}).get('email', 'Unknown')}")
+        user_email = session.get('user', {}).get('email', 'Unknown') if session.get('user') else 'Unknown'
+        logger.info(f"AI summary generation requested for task {task_id} by {user_email}")
 
         # Format task context for AI prompt
         task_info = context.get('task', {})
@@ -1055,7 +1056,7 @@ def generate_escalation_summary():
 
 ESCALATION REQUEST:
 - Task: {task_info.get('name', 'Unknown Task')} (ID: {task_id})
-- Escalated by: {session.get('user', {}).get('email', 'Unknown')}
+- Escalated by: {user_email}
 - Reason for escalation: {reason}
 
 TASK CONTEXT:
