@@ -27,6 +27,13 @@ from config.security import SecureConfig
 from auth.oauth_handler import auth_bp, init_redis, login_required
 from auth.security_middleware import SecurityMiddleware, RateLimiter
 
+# Configure logging FIRST (before using logger)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Load environment variables
 load_dotenv()
 
@@ -38,13 +45,6 @@ else:
     # Mask the API key for logging
     masked_key = f"{openai.api_key[:10]}...{openai.api_key[-10:]}" if len(openai.api_key) > 20 else "***"
     logger.info(f"OpenAI API key loaded: {masked_key}")
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 # Initialize Flask app with security config
 app = Flask(__name__)
