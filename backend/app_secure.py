@@ -1018,41 +1018,138 @@ Please provide a concise escalation summary that:
 Format your response as a professional escalation summary."""
 
         try:
+            # Extensive logging for debugging
+            logger.info(f"[AI SUMMARY] Starting generation for task {task_id}")
+            logger.info(f"[AI SUMMARY] OpenAI module version: {openai.__version__ if hasattr(openai, '__version__') else 'Unknown'}")
+            
             # Check if OpenAI API key is configured
             if not openai.api_key:
-                logger.error("OpenAI API key not configured")
+                logger.error("[AI SUMMARY] OpenAI API key not configured")
                 raise Exception("OpenAI API key not configured")
             
-            # Call OpenAI API - Try GPT-4 first
-            try:
-                response = openai.ChatCompletion.create(
-                    model="gpt-4",  # Using GPT-4 as required
-                    messages=[
-                        {"role": "system", "content": "You are a professional project manager creating escalation summaries."},
-                        {"role": "user", "content": ai_prompt}
-                    ],
-                    max_tokens=400,
-                    temperature=0.7
-                )
+            logger.info(f"[AI SUMMARY] API key present: {openai.api_key[:10]}...{openai.api_key[-10:]}")
+            
+            # Detect OpenAI version and use appropriate syntax
+            ai_summary = None
+            model_used = None
+            
+            # Properly detect OpenAI version
+            use_old_syntax = False
+            if hasattr(openai, '__version__'):
+                version = openai.__version__
+                major_version = int(version.split('.')[0])
+                use_old_syntax = major_version < 1
+                logger.info(f"[AI SUMMARY] Detected OpenAI v{version}, major version: {major_version}")
+            else:
+                # If we can't determine version, try old syntax first
+                use_old_syntax = True
+                logger.warning("[AI SUMMARY] Cannot detect OpenAI version, trying old syntax first")
+            
+            if use_old_syntax:
+                # Old version (0.28.x)
+                logger.info("[AI SUMMARY] Using OpenAI v0.28.x syntax")
                 
-                ai_summary = response.choices[0].message.content.strip()
-                model_used = "gpt-4"
-                
-            except Exception as e:
-                # If GPT-4 fails, try GPT-4-turbo-preview as fallback
-                logger.warning(f"GPT-4 failed, trying GPT-4-turbo-preview: {e}")
-                response = openai.ChatCompletion.create(
-                    model="gpt-4-turbo-preview",
-                    messages=[
-                        {"role": "system", "content": "You are a professional project manager creating escalation summaries."},
-                        {"role": "user", "content": ai_prompt}
-                    ],
-                    max_tokens=400,
-                    temperature=0.7
-                )
-                
-                ai_summary = response.choices[0].message.content.strip()
-                model_used = "gpt-4-turbo-preview"
+                try:
+                    logger.info("[AI SUMMARY] Attempting GPT-4 with old syntax")
+                    response = openai.ChatCompletion.create(
+                        model="gpt-4",
+                        messages=[
+                            {"role": "system", "content": "You are a professional project manager creating escalation summaries."},
+                            {"role": "user", "content": ai_prompt}
+                        ],
+                        max_tokens=400,
+                        temperature=0.7
+                    )
+                    ai_summary = response.choices[0].message.content.strip()
+                    model_used = "gpt-4"
+                    logger.info("[AI SUMMARY] GPT-4 succeeded with old syntax")
+                    
+                except Exception as e:
+                    logger.warning(f"[AI SUMMARY] GPT-4 failed with old syntax: {e}")
+                    logger.info("[AI SUMMARY] Attempting GPT-4-turbo-preview with old syntax")
+                    response = openai.ChatCompletion.create(
+                        model="gpt-4-turbo-preview",
+                        messages=[
+                            {"role": "system", "content": "You are a professional project manager creating escalation summaries."},
+                            {"role": "user", "content": ai_prompt}
+                        ],
+                        max_tokens=400,
+                        temperature=0.7
+                    )
+                    ai_summary = response.choices[0].message.content.strip()
+                    model_used = "gpt-4-turbo-preview"
+                    logger.info("[AI SUMMARY] GPT-4-turbo-preview succeeded with old syntax")
+                    
+            else:
+                # New version (1.0+)
+                logger.info("[AI SUMMARY] Using OpenAI v1.0+ syntax")
+                try:
+                    from openai import OpenAI
+                    # Try to create client - this might fail with httpx version issues
+                    try:
+                        client = OpenAI(api_key=openai.api_key)
+                    except TypeError as te:
+                        if 'proxies' in str(te):
+                            logger.error("[AI SUMMARY] httpx version incompatibility detected")
+                            logger.error("[AI SUMMARY] This usually means httpx is too old for openai v1.0+")
+                            logger.error("[AI SUMMARY] Falling back to old syntax despite v1.0+ being installed")
+                            # Force old syntax as fallback
+                            raise Exception("httpx incompatibility - forcing old syntax")
+                        else:
+                            raise
+                    
+                    try:
+                        logger.info("[AI SUMMARY] Attempting GPT-4 with new syntax")
+                        response = client.chat.completions.create(
+                            model="gpt-4",
+                            messages=[
+                                {"role": "system", "content": "You are a professional project manager creating escalation summaries."},
+                                {"role": "user", "content": ai_prompt}
+                            ],
+                            max_tokens=400,
+                            temperature=0.7
+                        )
+                        ai_summary = response.choices[0].message.content.strip()
+                        model_used = "gpt-4"
+                        logger.info("[AI SUMMARY] GPT-4 succeeded with new syntax")
+                        
+                    except Exception as e:
+                        logger.warning(f"[AI SUMMARY] GPT-4 failed with new syntax: {e}")
+                        logger.info("[AI SUMMARY] Attempting GPT-4-turbo-preview with new syntax")
+                        response = client.chat.completions.create(
+                            model="gpt-4-turbo-preview",
+                            messages=[
+                                {"role": "system", "content": "You are a professional project manager creating escalation summaries."},
+                                {"role": "user", "content": ai_prompt}
+                            ],
+                            max_tokens=400,
+                            temperature=0.7
+                        )
+                        ai_summary = response.choices[0].message.content.strip()
+                        model_used = "gpt-4-turbo-preview"
+                        logger.info("[AI SUMMARY] GPT-4-turbo-preview succeeded with new syntax")
+                        
+                except Exception as new_syntax_error:
+                    logger.error(f"[AI SUMMARY] New syntax completely failed: {new_syntax_error}")
+                    logger.info("[AI SUMMARY] Attempting old syntax as emergency fallback")
+                    
+                    # Emergency fallback to old syntax even though we detected v1.0+
+                    try:
+                        response = openai.ChatCompletion.create(
+                            model="gpt-4",
+                            messages=[
+                                {"role": "system", "content": "You are a professional project manager creating escalation summaries."},
+                                {"role": "user", "content": ai_prompt}
+                            ],
+                            max_tokens=400,
+                            temperature=0.7
+                        )
+                        ai_summary = response.choices[0].message.content.strip()
+                        model_used = "gpt-4-emergency"
+                        logger.info("[AI SUMMARY] Emergency old syntax succeeded")
+                    except:
+                        # Re-raise the original error
+                        raise new_syntax_error
             
             return jsonify({
                 "success": True,
@@ -1063,14 +1160,17 @@ Format your response as a professional escalation summary."""
             })
             
         except Exception as openai_error:
-            logger.error(f"OpenAI API error: {openai_error}")
+            logger.error(f"[AI SUMMARY] Complete OpenAI failure: {openai_error}")
+            logger.error(f"[AI SUMMARY] Error type: {type(openai_error).__name__}")
+            logger.error(f"[AI SUMMARY] Error details: {str(openai_error)}")
             
             # Return error - no mock data
             return jsonify({
                 "success": False,
                 "error": "AI service temporarily unavailable. Please try again later.",
                 "technical_error": str(openai_error),
-                "task_id": task_id
+                "task_id": task_id,
+                "openai_version": openai.__version__ if hasattr(openai, '__version__') else 'Unknown'
             }), 503
         
     except Exception as e:
