@@ -762,7 +762,7 @@ def escalate_task(task_id):
             custom_fields = [
                 {"id": escalation_fields['ESCALATION_REASON'], "value": escalation_reason},
                 {"id": escalation_fields['ESCALATION_AI_SUMMARY'], "value": ai_summary},
-                {"id": escalation_fields['ESCALATION_STATUS'], "value": "escalated"},  # Use string value for dropdown
+                {"id": escalation_fields['ESCALATION_STATUS'], "value": "pending"},  # Set to pending until supervisor responds
                 {"id": escalation_fields['ESCALATION_TIMESTAMP'], "value": int(datetime.now().timestamp() * 1000)}
             ]
             
