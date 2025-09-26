@@ -989,6 +989,45 @@ def generate_escalation_summary():
         parent_task_info = context.get('parent_task', {})
         subtasks_info = context.get('subtasks', [])
         
+        # [DEBUG] Add comprehensive logging before prompt construction
+        logger.info(f"[AI DEBUG] === Starting prompt construction ===")
+        logger.info(f"[AI DEBUG] task_info type: {type(task_info)}")
+        logger.info(f"[AI DEBUG] task_info keys: {list(task_info.keys()) if task_info else 'None'}")
+        
+        # Check status field specifically
+        status_field = task_info.get('status')
+        logger.info(f"[AI DEBUG] task_info.get('status') = {status_field}")
+        logger.info(f"[AI DEBUG] status type: {type(status_field)}")
+        
+        # Check priority field specifically  
+        priority_field = task_info.get('priority')
+        logger.info(f"[AI DEBUG] task_info.get('priority') = {priority_field}")
+        logger.info(f"[AI DEBUG] priority type: {type(priority_field)}")
+        
+        # Check subtasks
+        logger.info(f"[AI DEBUG] subtasks_info count: {len(subtasks_info)}")
+        for i, subtask in enumerate(subtasks_info[:3]):  # Log first 3 subtasks
+            subtask_status = subtask.get('status')
+            logger.info(f"[AI DEBUG] subtask[{i}].get('status') = {subtask_status}, type = {type(subtask_status)}")
+        
+        # FIX: Safely get status text (handle None values from ClickUp)
+        status_obj = task_info.get('status')
+        if status_obj is None:
+            status_text = 'Unknown'
+            logger.info(f"[AI DEBUG] status is None, using 'Unknown'")
+        else:
+            status_text = status_obj.get('status', 'Unknown') if isinstance(status_obj, dict) else 'Unknown'
+            logger.info(f"[AI DEBUG] status_text extracted: {status_text}")
+        
+        # FIX: Safely get priority text (handle None values from ClickUp)
+        priority_obj = task_info.get('priority')
+        if priority_obj is None:
+            priority_text = 'None'
+            logger.info(f"[AI DEBUG] priority is None, using 'None'")
+        else:
+            priority_text = priority_obj.get('priority', 'None') if isinstance(priority_obj, dict) else 'None'
+            logger.info(f"[AI DEBUG] priority_text extracted: {priority_text}")
+        
         # Build comprehensive context for AI
         ai_prompt = f"""You are an expert project manager helping to prioritize task escalations. 
 
@@ -998,8 +1037,8 @@ ESCALATION REQUEST:
 - Reason for escalation: {reason}
 
 TASK CONTEXT:
-- Status: {task_info.get('status', {}).get('status', 'Unknown')}
-- Priority: {task_info.get('priority', {}).get('priority', 'None')}
+- Status: {status_text}
+- Priority: {priority_text}
 - Assignees: {', '.join([a.get('username', 'Unknown') for a in task_info.get('assignees', [])])}
 - Due Date: {task_info.get('due_date', 'Not set')}
 - Description: {(task_info.get('description', 'No description')[:200] + '...' if len(task_info.get('description', '')) > 200 else task_info.get('description', 'No description'))}
@@ -1007,7 +1046,7 @@ TASK CONTEXT:
 HIERARCHY CONTEXT:
 - Parent Task: {parent_task_info.get('name', 'None')}
 - Subtasks: {len(subtasks_info)} total
-- Completed Subtasks: {len([s for s in subtasks_info if s.get('status', {}).get('type', '') == 'closed'])}
+- Completed Subtasks: {len([s for s in subtasks_info if s.get('status') and isinstance(s.get('status'), dict) and s.get('status').get('type', '') == 'closed'])}
 
 Please provide a concise escalation summary that:
 1. Clearly explains the issue and why it needs attention
