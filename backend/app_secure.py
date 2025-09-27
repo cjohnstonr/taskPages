@@ -1341,6 +1341,7 @@ def get_user_role():
     try:
         # For now, implement basic supervisor detection
         # This can be enhanced with proper role management later
+        # FIXED: Use request.user (set by @login_required) instead of session
         user_email = request.user.get('email', '')
         
         # Simple supervisor detection - can be made more sophisticated
