@@ -998,7 +998,8 @@ def generate_escalation_summary():
 
         task_id = data.get('task_id')
         reason = data.get('reason', '').strip()
-        context = data.get('context', {})
+        # FIX: Handle case where context is explicitly None
+        context = data.get('context') or {}
 
         if not task_id or not reason:
             return jsonify({"error": "task_id and reason are required"}), 400
@@ -1010,9 +1011,10 @@ def generate_escalation_summary():
         logger.info(f"AI summary generation requested for task {task_id} by {user_email}")
 
         # Format task context for AI prompt
-        task_info = context.get('task', {})
-        parent_task_info = context.get('parent_task', {})
-        subtasks_info = context.get('subtasks', [])
+        # FIX: Handle case where task/parent_task are explicitly None in the context
+        task_info = context.get('task') or {}
+        parent_task_info = context.get('parent_task') or {}
+        subtasks_info = context.get('subtasks') or []
         
         # [DEBUG] Add comprehensive logging before prompt construction
         logger.info(f"[AI DEBUG] === Starting prompt construction ===")

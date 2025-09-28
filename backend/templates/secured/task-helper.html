@@ -329,8 +329,8 @@
                         task_id: task.id,
                         reason: escalationText,
                         context: {
-                            task: task,
-                            parent_task: parentTask
+                            task: task || {},  // Ensure we never send null
+                            parent_task: parentTask || {}  // Ensure we never send null
                         }
                     })
                 });

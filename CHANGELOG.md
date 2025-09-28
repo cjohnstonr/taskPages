@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## [2025-09-28] - Type: Pipeline
+- Change: Fixed AI summary NoneType error by handling explicit None values in context data
+- Files: backend/app_secure.py (lines 1002, 1014-1016), backend/templates/secured/task-helper.html (lines 332-333)
+- State impact: None
+- Field mutations: None
+- Performance: No measurable impact on endpoint performance
+
+**Root Cause**: When frontend sent `context: {task: null}`, the code `context.get('task', {})` returned `None` instead of `{}` because the key existed with value None. This caused `task_info.get('status')` to fail with NoneType error.
+
+**Solution**: 
+- Backend: Changed to `context.get('task') or {}` pattern (lines 1014-1016)
+- Frontend: Added defensive `task || {}` to never send null values (lines 332-333)
+
+**Impact**: AI escalation summary now handles all edge cases including null/undefined task data.
+
 ## [2025-09-27] - Type: Pipeline
 - Change: Fixed AI summary functionality regression by correcting session access pattern in user role endpoint
 - Files: backend/app_secure.py
