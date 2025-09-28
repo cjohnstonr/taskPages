@@ -872,7 +872,7 @@ def escalate_task(task_id):
 @rate_limiter.rate_limit(limit='10 per minute')
 def supervisor_response(task_id):
     """
-    Handle supervisor response to an escalated task
+    Handle response to an escalated task (anyone can respond)
     """
     try:
         data = request.get_json()
@@ -936,7 +936,7 @@ def supervisor_response(task_id):
             # Add resolution comment to task
             resolution_comment = f"""✅ **ESCALATION RESOLVED**
 
-**Supervisor Response**: 
+**Response**: 
 {supervisor_response_text}
 
 **Resolved by**: {request.user.get('email')}
