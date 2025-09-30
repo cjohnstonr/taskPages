@@ -31,6 +31,28 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        
+        /* Accordion animation for collapsible sections */
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        
+        .accordion-content.show {
+            max-height: 5000px;
+            transition: max-height 0.5s ease-in;
+        }
+        
+        /* Small spinner for loading states */
+        .spinner-sm {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3b82f6;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 0.8s linear infinite;
+        }
     </style>
 </head>
 <body>
@@ -134,12 +156,9 @@
         return String(field.value);
     }
 
-    // Task Details Panel - Shows task info cleanly
-    function TaskDetailsPanel({ task, title = "Task Details", isParent = false }) {
-        if (!task) return null;
-        
-        const nonEmptyFields = getNonEmptyCustomFields(task);
-        const [expanded, setExpanded] = useState(!isParent); // Parent collapsed by default
+    // Reusable Collapsible Section Component
+    function CollapsibleSection({ title, icon, children, defaultExpanded = false, badge = null }) {
+        const [expanded, setExpanded] = useState(defaultExpanded);
         
         return (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -149,9 +168,13 @@
                 >
                     <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                            <span className="text-lg">{isParent ? '👆' : '📋'}</span>
+                            <span className="text-lg">{icon}</span>
                             <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
-                            <span className="text-xs text-gray-500">({task.name})</span>
+                            {badge && (
+                                <span className="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs font-normal">
+                                    {badge}
+                                </span>
+                            )}
                         </div>
                         <svg 
                             className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`}
@@ -164,95 +187,298 @@
                     </div>
                 </div>
                 
-                {expanded && (
-                    <div className="p-4 space-y-4">
-                        {/* Task Name and Link */}
-                        <div>
-                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                                Task Name
-                            </h4>
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-900">{task.name}</span>
-                                {task.custom_id && (
-                                    <a
-                                        href={`https://app.clickup.com/t/${task.id}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-xs text-blue-600 hover:text-blue-800 font-mono"
-                                    >
-                                        {task.custom_id}
-                                    </a>
-                                )}
-                            </div>
-                        </div>
-                        
-                        {/* Description */}
-                        {task.description && (
-                            <div>
-                                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                                    Description
-                                </h4>
-                                <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded">
-                                    {task.description}
-                                </div>
-                            </div>
-                        )}
-                        
-                        {/* Non-Empty Custom Fields */}
-                        {nonEmptyFields.length > 0 && (
-                            <div>
-                                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                                    Custom Fields
-                                </h4>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {nonEmptyFields.map(field => (
-                                        <div key={field.id} className="bg-gray-50 p-2 rounded">
-                                            <div className="text-xs text-gray-500">{field.name}</div>
-                                            <div className="text-sm text-gray-900 font-medium">
-                                                {formatFieldValue(field)}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        
-                        {/* Basic Info */}
-                        <div className="grid grid-cols-2 gap-3 text-xs">
-                            <div>
-                                <span className="text-gray-500">Status:</span>
-                                <span className="ml-1 font-medium" style={{color: task.status?.color}}>
-                                    {task.status?.status || 'Unknown'}
+                <div className={`accordion-content ${expanded ? 'show' : ''}`}>
+                    {expanded && <div className="p-4">{children}</div>}
+                </div>
+            </div>
+        );
+    }
+    
+    // Task Header Component - Shows task context with breadcrumb
+    function TaskHeader({ task, parentTask }) {
+        if (!task) return null;
+        
+        return (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                {/* Parent Task Context (if exists) */}
+                {parentTask && (
+                    <div className="p-3 bg-blue-50 border-b border-blue-200">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                                <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
+                                    🏢 Parent Task
                                 </span>
+                                <span className="text-xs text-blue-600">{parentTask.name}</span>
                             </div>
-                            {task.priority && (
-                                <div>
-                                    <span className="text-gray-500">Priority:</span>
-                                    <span className="ml-1 font-medium">
-                                        {task.priority.priority || 'None'}
-                                    </span>
-                                </div>
-                            )}
-                            {task.assignees?.length > 0 && (
-                                <div>
-                                    <span className="text-gray-500">Assignees:</span>
-                                    <span className="ml-1 font-medium">
-                                        {task.assignees.map(a => a.username).join(', ')}
-                                    </span>
-                                </div>
-                            )}
-                            {task.due_date && (
-                                <div>
-                                    <span className="text-gray-500">Due:</span>
-                                    <span className="ml-1 font-medium">
-                                        {new Date(task.due_date).toLocaleDateString()}
-                                    </span>
-                                </div>
+                            {parentTask.custom_id && (
+                                <a
+                                    href={`https://app.clickup.com/t/${parentTask.id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-mono"
+                                >
+                                    {parentTask.custom_id}
+                                </a>
                             )}
                         </div>
                     </div>
                 )}
+                
+                {/* Current Task Header */}
+                <div className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <h2 className="text-lg font-semibold text-gray-900">{task.name}</h2>
+                        {task.custom_id && (
+                            <a
+                                href={`https://app.clickup.com/t/${task.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-mono"
+                            >
+                                {task.custom_id}
+                            </a>
+                        )}
+                    </div>
+                    
+                    {/* Task Metadata */}
+                    <div className="flex items-center space-x-4 text-xs">
+                        {task.status && (
+                            <div className="flex items-center">
+                                <span
+                                    className="inline-block w-2 h-2 rounded-full mr-1"
+                                    style={{ backgroundColor: task.status.color || '#6b7280' }}
+                                ></span>
+                                <span className="text-gray-600">{task.status.status}</span>
+                            </div>
+                        )}
+                        {task.due_date && (
+                            <div className="text-gray-600">
+                                Due: {new Date(task.due_date).toLocaleDateString()}
+                            </div>
+                        )}
+                        {task.assignees?.length > 0 && (
+                            <div className="text-gray-600">
+                                👤 {task.assignees.map(a => a.username).join(', ')}
+                            </div>
+                        )}
+                        {task.priority && (
+                            <div className="text-gray-600">
+                                Priority: {task.priority.priority || 'None'}
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
+        );
+    }
+    
+    // Comments Section Component
+    function CommentsSection({ task }) {
+        const [comments, setComments] = useState([]);
+        const [loading, setLoading] = useState(false);
+        const [hasMore, setHasMore] = useState(false);
+        const [expandedComments, setExpandedComments] = useState(new Set());
+        const [expanded, setExpanded] = useState(false);
+        
+        const loadComments = async () => {
+            if (!task?.id || loading) return;
+            
+            setLoading(true);
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/task/${task.id}/comments?limit=5`, {
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (response.status === 401) {
+                    window.location.href = '/auth/login';
+                    return;
+                }
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    setComments(data.comments || []);
+                    setHasMore(data.has_more || false);
+                }
+            } catch (error) {
+                console.error('Error loading comments:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        
+        const loadMoreComments = async () => {
+            if (!task?.id || loading) return;
+            
+            setLoading(true);
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/task/${task.id}/comments?start=${comments.length}&limit=5`, {
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    setComments(prev => [...prev, ...(data.comments || [])]);
+                    setHasMore(data.has_more || false);
+                }
+            } catch (error) {
+                console.error('Error loading more comments:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        
+        const toggleCommentExpansion = (commentId) => {
+            setExpandedComments(prev => {
+                const newSet = new Set(prev);
+                if (newSet.has(commentId)) {
+                    newSet.delete(commentId);
+                } else {
+                    newSet.add(commentId);
+                }
+                return newSet;
+            });
+        };
+        
+        useEffect(() => {
+            if (expanded && comments.length === 0) {
+                loadComments();
+            }
+        }, [expanded]);
+        
+        return (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <div 
+                    className="px-4 py-3 bg-gray-50 border-b cursor-pointer hover:bg-gray-100 transition-colors"
+                    onClick={() => setExpanded(!expanded)}
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                            <span className="text-lg">💬</span>
+                            <h3 className="text-sm font-semibold text-gray-700">Recent Activity</h3>
+                            {comments.length > 0 && (
+                                <span className="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs font-normal">
+                                    {comments.length}
+                                </span>
+                            )}
+                        </div>
+                        <svg 
+                            className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`}
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                    </div>
+                </div>
+                
+                <div className={`accordion-content ${expanded ? 'show' : ''}`}>
+                    {expanded && (
+                        <div className="p-4">
+                            {loading && comments.length === 0 ? (
+                                <div className="text-center py-4">
+                                    <div className="spinner-sm mx-auto"></div>
+                                    <p className="text-xs text-gray-500 mt-2">Loading comments...</p>
+                                </div>
+                            ) : comments.length === 0 ? (
+                                <p className="text-center py-4 text-gray-500 text-sm">No comments yet</p>
+                            ) : (
+                                <div className="space-y-3 max-h-96 overflow-y-auto">
+                                    {comments.map((comment) => (
+                                        <div key={comment.id} className="border-l-2 border-gray-200 pl-3">
+                                            <div className="flex items-start gap-2">
+                                                <div 
+                                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium text-white flex-shrink-0"
+                                                    style={{ backgroundColor: comment.user?.color || '#808080' }}
+                                                >
+                                                    {comment.user?.initials || '??'}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                        <span className="font-medium">{comment.user?.username || 'Unknown'}</span>
+                                                        <span>•</span>
+                                                        <span>{comment.date_formatted || 'No date'}</span>
+                                                    </div>
+                                                    <div className="text-sm text-gray-700 mt-1 break-words">
+                                                        {comment.text && comment.text.length > 100 ? (
+                                                            <>
+                                                                {expandedComments.has(comment.id) 
+                                                                    ? comment.text 
+                                                                    : `${comment.text.substring(0, 100)}...`
+                                                                }
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        toggleCommentExpansion(comment.id);
+                                                                    }}
+                                                                    className="text-blue-600 text-xs ml-1 hover:underline"
+                                                                >
+                                                                    {expandedComments.has(comment.id) ? 'show less' : 'show more'}
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            comment.text || 'No comment text'
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    
+                                    {hasMore && (
+                                        <div className="text-center pt-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    loadMoreComments();
+                                                }}
+                                                disabled={loading}
+                                                className="text-xs text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50"
+                                            >
+                                                {loading ? 'Loading...' : 'Load more'}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+    
+    // Custom Fields Section - HIDDEN BY DEFAULT
+    function CustomFieldsSection({ task }) {
+        const nonEmptyFields = getNonEmptyCustomFields(task);
+        
+        if (!task || nonEmptyFields.length === 0) return null;
+        
+        return (
+            <CollapsibleSection 
+                title={`Custom Fields (${nonEmptyFields.length})`}
+                icon="📊"
+                defaultExpanded={false} // HIDDEN BY DEFAULT
+            >
+                <div className="grid grid-cols-2 gap-3">
+                    {nonEmptyFields.map(field => (
+                        <div key={field.id} className="bg-gray-50 p-2 rounded">
+                            <div className="text-xs text-gray-500">{field.name}</div>
+                            <div className="text-sm text-gray-900 font-medium">
+                                {formatFieldValue(field)}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </CollapsibleSection>
         );
     }
 
@@ -610,38 +836,63 @@
                 <div className="bg-white shadow-sm border-b">
                     <div className="max-w-6xl mx-auto px-4 py-4">
                         <h1 className="text-xl font-semibold text-gray-900">
-                            🚨 Task Helper - Escalation System
+                            🚨 Escalation Response System
                         </h1>
                     </div>
                 </div>
                 
                 {/* Main Content */}
                 <div className="max-w-6xl mx-auto px-4 py-6">
-                    <div className="space-y-6">
-                        {/* Parent Task (if exists) */}
-                        {parentTask && (
-                            <TaskDetailsPanel 
-                                task={parentTask} 
-                                title="Parent Task" 
-                                isParent={true}
-                            />
-                        )}
+                    <div className="space-y-4">
+                        {/* 1. Task Context Header (Always visible) */}
+                        <TaskHeader task={task} parentTask={parentTask} />
                         
-                        {/* Current Task */}
-                        <TaskDetailsPanel 
-                            task={task} 
-                            title="Current Task" 
-                            isParent={false}
-                        />
-                        
-                        {/* Comments (if needed, can add CommentsSection here) */}
-                        
-                        {/* Escalation Module */}
+                        {/* 2. Escalation Module (Primary focus) */}
                         <EscalationModule 
                             task={task} 
                             parentTask={parentTask}
                             onRefresh={loadTaskData}
                         />
+                        
+                        {/* 3. Comments Section (Collapsible) */}
+                        <CommentsSection task={task} />
+                        
+                        {/* 4. Task Description (Collapsible) */}
+                        {task?.description && (
+                            <CollapsibleSection title="Task Description" icon="📝" defaultExpanded={false}>
+                                <div className="text-sm text-gray-700">
+                                    {task.description}
+                                </div>
+                            </CollapsibleSection>
+                        )}
+                        
+                        {/* 5. Custom Fields (Collapsible, hidden by default) */}
+                        <CustomFieldsSection task={task} />
+                        
+                        {/* 6. Attachments (if any) */}
+                        {task?.attachments?.length > 0 && (
+                            <CollapsibleSection 
+                                title={`Attachments`} 
+                                icon="📎"
+                                badge={task.attachments.length}
+                                defaultExpanded={false}
+                            >
+                                <div className="space-y-2">
+                                    {task.attachments.map((attachment, idx) => (
+                                        <div key={idx} className="flex items-center space-x-2 text-sm">
+                                            <span>📄</span>
+                                            <a 
+                                                href={attachment.url} 
+                                                target="_blank" 
+                                                className="text-blue-600 hover:underline"
+                                            >
+                                                {attachment.title || 'Attachment'}
+                                            </a>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CollapsibleSection>
+                        )}
                     </div>
                 </div>
             </div>

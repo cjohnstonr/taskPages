@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## [2025-09-30] - Type: UI
+- Change: Complete redesign of task-helper interface to prioritize escalation context over custom fields
+- Files: backend/templates/secured/task-helper.html
+- State impact: None
+- Field mutations: None
+- Performance: Improved initial render with collapsed sections
+
+**Major Changes**:
+- Added CollapsibleSection component for clean, organized interface
+- Implemented CommentsSection with avatar display and pagination (borrowed from wait-node-v2.html)
+- Created TaskHeader component showing task context with parent breadcrumb
+- Custom fields now hidden by default in collapsible section
+- Restructured layout: Header → Escalation → Comments → Description → Custom Fields
+- Added smooth accordion animations for professional feel
+- Comments load on-demand when section expanded
+
+**UI Improvements**:
+- Custom fields no longer dominate the interface
+- Focus shifted to escalation workflow
+- Added user avatars with initials in comments
+- Show more/less for long comments
+- Load more pagination for comment threads
+- Consistent collapsible pattern throughout
+
 ## [2025-09-28] - Type: Pipeline
 - Change: Fixed AI summary NoneType error by handling explicit None values in context data
 - Files: backend/app_secure.py (lines 1002, 1014-1016), backend/templates/secured/task-helper.html (lines 332-333)
