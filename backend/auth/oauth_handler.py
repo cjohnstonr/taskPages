@@ -5,19 +5,20 @@ Implements secure OAuth flow with CSRF protection and domain validation
 import os
 import secrets
 import logging
+import base64
 from datetime import datetime, timedelta
 from functools import wraps
-from urllib.parse import urlencode, quote
+from urllib.parse import urlencode, quote, urlparse
 import hashlib
 import hmac
 
 import requests
 from flask import (
-    Blueprint, 
-    request, 
-    redirect, 
-    session, 
-    jsonify, 
+    Blueprint,
+    request,
+    redirect,
+    session,
+    jsonify,
     abort,
     current_app,
     url_for
@@ -277,98 +278,140 @@ def login_required(f):
 @auth_bp.route('/login')
 def login():
     """
-    Initiate OAuth login flow with CSRF protection
+    Initiate OAuth login flow with state-based redirect tracking
+    Uses OAuth state parameter to securely store redirect URL (OAuth 2.0 best practice)
     """
-    # Store the referring page for post-OAuth redirect
-    referrer = request.headers.get('Referer')
-    if referrer and referrer.startswith(current_app.config['FRONTEND_URL']):
-        session['next_url'] = referrer
-        logger.info(f"Storing referrer for post-OAuth redirect: {referrer}")
-    
-    # Generate CSRF state token
-    state = generate_csrf_token()
-    session['oauth_state'] = state
+    # Get the URL user was trying to access (set by @login_required decorator)
+    redirect_url = session.pop('next_url', current_app.config['FRONTEND_URL'])
+
+    # Validate redirect URL against whitelist
+    allowed_hosts = [
+        urlparse(current_app.config['FRONTEND_URL']).netloc,
+        urlparse(current_app.config['BACKEND_URL']).netloc,
+        'localhost',  # For local development
+        '127.0.0.1'   # For local development
+    ]
+
+    parsed_redirect = urlparse(redirect_url)
+    if parsed_redirect.netloc not in allowed_hosts:
+        logger.warning(f"Rejecting redirect to untrusted host: {parsed_redirect.netloc}")
+        redirect_url = current_app.config['FRONTEND_URL']
+
+    # Create state payload with CSRF token + redirect URL
+    csrf_token = secrets.token_urlsafe(32)
+    state_data = {
+        'csrf': csrf_token,
+        'redirect': redirect_url,
+        'timestamp': datetime.utcnow().isoformat()
+    }
+
+    # Store CSRF token in session for verification in callback
+    session['oauth_csrf'] = csrf_token
     session['oauth_timestamp'] = datetime.utcnow().isoformat()
-    
-    # Ensure session is properly saved
     session.modified = True
-    
+
+    # Base64 encode state (Google will roundtrip it unchanged)
+    state = base64.urlsafe_b64encode(
+        json.dumps(state_data).encode()
+    ).decode()
+
     # Generate nonce for additional security
     nonce = secrets.token_urlsafe(32)
     session['oauth_nonce'] = nonce
-    
-    # Ensure session modifications are saved
-    session.modified = True
-    
-    # DEBUG: Log what we're storing
-    logger.info(f"OAuth login initiated. Session ID: {session.get('session_id', 'None')}")
-    logger.info(f"Storing state: {state}")
-    logger.info(f"Session keys after storage: {list(session.keys())}")
-    logger.info(f"Session permanent: {session.permanent}")
-    
-    # Build OAuth URL
+
+    logger.info(f"OAuth login initiated from IP: {request.remote_addr}")
+    logger.info(f"Redirect URL stored in state: {redirect_url}")
+
+    # Build OAuth URL with state containing redirect info
     params = {
         'client_id': current_app.config['GOOGLE_CLIENT_ID'],
         'redirect_uri': f"{current_app.config['BACKEND_URL']}/auth/callback",
         'response_type': 'code',
         'scope': 'openid email profile',
-        'state': state,
+        'state': state,  # Contains CSRF token + redirect URL
         'nonce': nonce,
-        'access_type': 'online',  # Don't need offline access
-        'prompt': 'select_account',  # Always show account selector
+        'access_type': 'online',
+        'prompt': 'select_account',
     }
-    
+
     # Add hosted domain hint for workspace
     if current_app.config.get('OAUTH_REQUIRE_WORKSPACE_DOMAIN'):
         params['hd'] = current_app.config['GOOGLE_WORKSPACE_DOMAIN']
-    
+
     oauth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
-    
-    logger.info(f"Initiating OAuth login from IP: {request.remote_addr}")
-    
+
     return redirect(oauth_url)
 
 
 @auth_bp.route('/callback')
 def callback():
     """
-    Handle OAuth callback with comprehensive security checks
+    Handle OAuth callback with state-based redirect
+    Validates state parameter and extracts redirect URL securely
     """
-    # DEBUG: Log session state at callback entry
-    logger.info(f"OAuth callback received. Session ID: {session.get('session_id', 'None')}")
-    logger.info(f"Session keys: {list(session.keys())}")
-    logger.info(f"OAuth state in session: {session.get('oauth_state', 'None')}")
-    logger.info(f"Request args: {dict(request.args)}")
-    
     # Check for errors from Google
     error = request.args.get('error')
     if error:
         logger.error(f"OAuth error: {error}")
         return jsonify({'error': f'Authentication failed: {error}'}), 400
-    
-    # Verify CSRF state token
-    state = request.args.get('state')
-    stored_state = session.get('oauth_state')
-    logger.info(f"State verification: received='{state}', stored='{stored_state}'")
-    
-    if not verify_csrf_token(state):
-        logger.warning(f"CSRF token verification failed from IP: {request.remote_addr}")
-        logger.warning(f"State mismatch: received='{state}', stored='{stored_state}'")
+
+    # Get and decode state parameter from Google
+    state_param = request.args.get('state')
+    if not state_param:
+        logger.error("Missing state parameter in OAuth callback")
+        abort(400, "Missing state parameter")
+
+    # Decode state parameter
+    try:
+        state_json = base64.urlsafe_b64decode(state_param.encode()).decode()
+        state_data = json.loads(state_json)
+    except Exception as e:
+        logger.error(f"Failed to decode state parameter: {e}")
+        abort(400, "Invalid state parameter")
+
+    # Verify CSRF token from state matches session
+    stored_csrf = session.pop('oauth_csrf', None)
+    received_csrf = state_data.get('csrf')
+
+    if not stored_csrf or not received_csrf:
+        logger.warning("Missing CSRF token in state or session")
+        abort(403, "CSRF validation failed - missing token")
+
+    if not secrets.compare_digest(stored_csrf, received_csrf):
+        logger.warning(f"CSRF token mismatch from IP: {request.remote_addr}")
         abort(403, "Invalid state parameter - possible CSRF attack")
-    
-    # Check timestamp to prevent replay attacks
-    oauth_timestamp = session.pop('oauth_timestamp', None)
-    if oauth_timestamp:
-        time_diff = datetime.utcnow() - datetime.fromisoformat(oauth_timestamp)
-        if time_diff > timedelta(minutes=10):
-            logger.warning("OAuth callback took too long - possible replay attack")
+
+    # Verify timestamp (10 minute expiry)
+    try:
+        state_timestamp = datetime.fromisoformat(state_data['timestamp'])
+        if datetime.utcnow() - state_timestamp > timedelta(minutes=10):
+            logger.warning("OAuth state expired")
             abort(403, "Authentication timeout - please try again")
-    
+    except (KeyError, ValueError) as e:
+        logger.error(f"Invalid timestamp in state: {e}")
+        abort(400, "Invalid state timestamp")
+
+    # Extract and validate redirect URL from state
+    redirect_url = state_data.get('redirect', current_app.config['FRONTEND_URL'])
+
+    # Double-check redirect URL against whitelist
+    allowed_hosts = [
+        urlparse(current_app.config['FRONTEND_URL']).netloc,
+        urlparse(current_app.config['BACKEND_URL']).netloc,
+        'localhost',
+        '127.0.0.1'
+    ]
+
+    parsed_redirect = urlparse(redirect_url)
+    if parsed_redirect.netloc not in allowed_hosts:
+        logger.warning(f"Rejecting redirect to untrusted host: {parsed_redirect.netloc}")
+        redirect_url = current_app.config['FRONTEND_URL']
+
     # Get authorization code
     code = request.args.get('code')
     if not code:
         return jsonify({'error': 'No authorization code received'}), 400
-    
+
     # Exchange code for tokens
     token_url = 'https://oauth2.googleapis.com/token'
     token_data = {
@@ -378,7 +421,7 @@ def callback():
         'redirect_uri': f"{current_app.config['BACKEND_URL']}/auth/callback",
         'grant_type': 'authorization_code'
     }
-    
+
     try:
         token_response = requests.post(token_url, data=token_data, timeout=10)
         token_response.raise_for_status()
@@ -386,28 +429,28 @@ def callback():
     except requests.exceptions.RequestException as e:
         logger.error(f"Token exchange failed: {e}")
         return jsonify({'error': 'Failed to exchange authorization code'}), 500
-    
+
     # Verify ID token
     id_token_str = tokens.get('id_token')
     if not id_token_str:
         return jsonify({'error': 'No ID token received'}), 400
-    
+
     user_info = verify_google_token(id_token_str)
     if not user_info:
         return jsonify({'error': 'Invalid ID token'}), 403
-    
+
     # Verify nonce
     expected_nonce = session.pop('oauth_nonce', None)
     if not expected_nonce or user_info.get('nonce') != expected_nonce:
         logger.warning("Nonce verification failed")
         abort(403, "Invalid nonce - possible replay attack")
-    
+
     # Create user session
     session_id = create_user_session(user_info)
-    
+
     # Generate a secure authentication token for cross-domain use
     auth_token = secrets.token_urlsafe(32)
-    
+
     # Store token in Redis or session for validation
     if redis_client:
         token_key = f"auth_token:{auth_token}"
@@ -425,21 +468,15 @@ def callback():
             'email': user_info.get('email'),
             'created_at': datetime.utcnow().isoformat()
         }
-    
-    # Determine redirect URL
-    next_url = session.pop('next_url', None)
-    # Simple URL safety check
-    if next_url and next_url.startswith(('/', current_app.config['FRONTEND_URL'])):
-        redirect_url = f"{next_url}?auth=success&token={auth_token}"
-    else:
-        # Redirect to frontend with success indicator and token
-        redirect_url = f"{current_app.config['FRONTEND_URL']}?auth=success&token={auth_token}"
-    
+
+    # SECURITY FIX: Use URL fragment (#) instead of query (?) to prevent token leakage
+    # Fragments are never sent to the server, preventing exposure in logs/Referer headers
+    final_redirect = f"{redirect_url}#auth=success&token={auth_token}"
+
     logger.info(f"Successful login for: {user_info.get('email')}")
-    logger.info(f"Created auth token for cross-domain use")
-    logger.info(f"Redirecting to: {redirect_url.split('&token=')[0] + '&token=***'}")
-    
-    return redirect(redirect_url)
+    logger.info(f"Redirecting to: {redirect_url} (token in fragment)")
+
+    return redirect(final_redirect)
 
 
 @auth_bp.route('/logout', methods=['POST'])
