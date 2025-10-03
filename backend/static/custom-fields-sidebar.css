@@ -1,0 +1,295 @@
+/* Custom Fields Sidebar Styles */
+
+.custom-fields-sidebar {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    background: #f8f9fa;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Sidebar Sections */
+.sidebar-section {
+    margin-bottom: 24px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-section h3 {
+    margin: 0;
+    padding: 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a1a1a;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 20px;
+    padding: 0 6px;
+    background: #e5e7eb;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #6b7280;
+}
+
+.filled-section .count-badge {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.empty-section .count-badge {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* Fields Container */
+.fields-container {
+    padding: 12px;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.no-fields {
+    padding: 24px;
+    text-align: center;
+    color: #9ca3af;
+    font-size: 13px;
+}
+
+/* Field Row */
+.field-row {
+    margin-bottom: 12px;
+    padding: 12px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.field-row:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+}
+
+.field-row.empty-field {
+    opacity: 0.6;
+}
+
+/* Field Header */
+.field-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    gap: 8px;
+}
+
+.field-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #374151;
+    flex: 1;
+    word-break: break-word;
+}
+
+/* Type Badges */
+.type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.type-badge.dropdown {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.type-badge.task_relationship {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.type-badge.array {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.type-badge.string {
+    background: #ddd6fe;
+    color: #5b21b6;
+}
+
+.type-badge.number {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.type-badge.boolean {
+    background: #fce7f3;
+    color: #9f1239;
+}
+
+.type-badge.object {
+    background: #fed7aa;
+    color: #92400e;
+}
+
+.type-badge.null,
+.type-badge.empty {
+    background: #e5e7eb;
+    color: #6b7280;
+}
+
+/* Field Values */
+.field-value {
+    font-size: 13px;
+    color: #1f2937;
+}
+
+.value-main {
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.value-meta {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 2px;
+}
+
+/* UUID Badge */
+.uuid-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    background: #f3f4f6;
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+    color: #6b7280;
+    margin-left: 6px;
+}
+
+/* Lists */
+.task-list,
+.array-list {
+    margin: 8px 0 0 0;
+    padding-left: 20px;
+    list-style: disc;
+}
+
+.task-list li,
+.array-list li {
+    margin: 4px 0;
+    font-size: 12px;
+    color: #4b5563;
+}
+
+.task-list li.more,
+.array-list li.more {
+    color: #9ca3af;
+    font-style: italic;
+}
+
+/* Text Values */
+.text-value {
+    word-break: break-word;
+    line-height: 1.5;
+}
+
+/* Number Values */
+.number-value {
+    font-family: 'Courier New', monospace;
+    font-weight: 500;
+}
+
+/* Boolean Values */
+.boolean-value {
+    font-weight: 500;
+}
+
+/* Object Values */
+.object-value pre {
+    margin: 0;
+    padding: 8px;
+    background: #1f2937;
+    color: #f9fafb;
+    border-radius: 4px;
+    font-size: 11px;
+    overflow-x: auto;
+}
+
+/* Loading & Error States */
+.sidebar-loading,
+.sidebar-error {
+    padding: 24px;
+    text-align: center;
+}
+
+.sidebar-loading {
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.sidebar-error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    color: #991b1b;
+}
+
+.sidebar-error strong {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.sidebar-error p {
+    margin: 0;
+    font-size: 13px;
+    color: #dc2626;
+}
+
+/* Scrollbar Styling */
+.fields-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.fields-container::-webkit-scrollbar-track {
+    background: #f3f4f6;
+    border-radius: 4px;
+}
+
+.fields-container::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 4px;
+}
+
+.fields-container::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .field-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .type-badge {
+        align-self: flex-start;
+    }
+}
