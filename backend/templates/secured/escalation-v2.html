@@ -487,6 +487,18 @@
         const isResolved = escalationStatus === 'RESOLVED' || supervisorResponse;
         const isAwaitingResponse = isEscalated && !isResolved;
 
+        // DEBUG: Log escalation state detection
+        console.log('🚨 [ESCALATION MODULE] State Detection:', {
+            escalationStatus,
+            reason,
+            summary,
+            supervisorResponse,
+            isEscalated,
+            isResolved,
+            isAwaitingResponse,
+            statusFieldRaw: status
+        });
+
         // No role checking needed - ANYONE can respond to escalations
 
         // Generate AI Summary
