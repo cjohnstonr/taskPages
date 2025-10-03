@@ -435,6 +435,11 @@
             return this.request(`/api/wait-node/initialize/${taskId}`);
         }
 
+        // Initialize escalation with task-helper endpoint (includes all escalation fields)
+        async initializeEscalation(taskId) {
+            return this.request(`/api/task-helper/initialize/${taskId}`);
+        }
+
         // Submit approval
         async submitApproval(taskId, approvalData) {
             return this.request(`/api/wait-node/approve/${taskId}`, {
@@ -2521,30 +2526,31 @@
                 const params = getUrlParams();
                 const taskId = params.task_id;
 
-                console.log('Starting with task:', taskId);
+                console.log('Starting escalation with task:', taskId);
 
-                // Fetch all data in a single backend call
-                const data = await api.initializeWaitNode(taskId);
-                
-                if (!data.root_task) {
-                    throw new Error('Could not find Process Library root task');
-                }
+                // Fetch all data from task-helper endpoint (includes escalation fields)
+                const data = await api.initializeEscalation(taskId);
+
+                console.log('Escalation data loaded:', data);
 
                 // Set all the state from the backend response
                 if (data.parent_task) {
                     setParentTask(data.parent_task);
                     console.log('Parent task found:', data.parent_task.name);
                 } else {
-                    console.log('No parent task - Process Library is top-level');
+                    console.log('No parent task');
                 }
-                
+
                 if (data.hierarchy) {
                     setHierarchyInfo(data.hierarchy);
                     console.log('Task hierarchy:', data.hierarchy);
                 }
-                
-                setProcessLibraryRoot(data.root_task);
-                setTaskData(data.wait_task);
+
+                // For escalation, main_task is the escalation task
+                if (data.root_task) {
+                    setProcessLibraryRoot(data.root_task);
+                }
+                setTaskData(data.main_task || data.wait_task);
                 setMainTask(data.main_task);
                 setSubtasks(data.subtasks || []);
 
