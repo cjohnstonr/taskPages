@@ -653,11 +653,15 @@ def initialize_task_helper(task_id):
             logger.error("ClickUp API key not configured")
             return jsonify({"error": "ClickUp integration not configured"}), 500
 
-        # Fetch the main task
+        # Fetch the main task with custom fields
         task_response = requests.get(
             f"https://api.clickup.com/api/v2/task/{task_id}",
             headers={"Authorization": clickup_token},
-            params={"include_subtasks": "true"}
+            params={
+                "include_subtasks": "true",
+                "custom_task_ids": "true",
+                "include_markdown_description": "true"
+            }
         )
         
         if task_response.status_code == 404:
