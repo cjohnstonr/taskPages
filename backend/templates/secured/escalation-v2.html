@@ -196,7 +196,15 @@
         MCP_CLIENT: '6cbb8b35-fe7c-434d-a0cf-ae7498a2e55e',
         // MCP Fields
         MCP_NAME: '5e2e416b-7ee8-4984-859b-c70c86c4d042',
-        MCP_EXPECTED_ACTION: '56db1b14-75cb-42d9-bd38-45362d974516'
+        MCP_EXPECTED_ACTION: '56db1b14-75cb-42d9-bd38-45362d974516',
+        // Escalation Fields
+        ESCALATION_REASON: 'c6e0281e-9001-42d7-a265-8f5da6b71132',
+        ESCALATION_AI_SUMMARY: 'e9e831f2-b439-4067-8e88-6b715f4263b2',
+        ESCALATION_STATUS: '8d784bd0-18e5-4db3-b45e-9a2900262e04',
+        ESCALATED_TO: '934811f1-239f-4d53-880c-3655571fd02e',
+        ESCALATION_TIMESTAMP: '5ffd2b3e-b8dc-4bd0-819a-a3d4c3396a5f',
+        SUPERVISOR_RESPONSE: 'a077ecc9-1a59-48af-b2cd-42a63f5a7f86',
+        ESCALATION_RESOLVED_TIMESTAMP: 'c40bf1c4-7d33-4b2b-8765-0784cd88591a'
     };
 
     // Helper function to extract URL parameters
@@ -321,6 +329,30 @@
             processLibrary: processLibraryFields,
             waitNode: waitNodeFields
         };
+    }
+
+    // Escalation Helper Functions
+    // Helper to resolve dropdown value to readable value
+    function getDropdownValue(field) {
+        if (!field || field.value === null || field.value === undefined) return null;
+
+        // Special handling for ESCALATION_STATUS dropdown
+        if (field.id === FIELD_IDS.ESCALATION_STATUS) {
+            // ClickUp stores dropdown values as orderindex integers
+            // Based on the field structure: 0="Not Escalated", 1="Escalated", 2="Resolved"
+            if (field.value === 0) return 'NOT_ESCALATED';
+            if (field.value === 1) return 'ESCALATED';
+            if (field.value === 2) return 'RESOLVED';
+        }
+
+        return field.value; // fallback to raw value
+    }
+
+    // Helper to get escalation status as readable string
+    function getEscalationStatus(task) {
+        if (!task?.custom_fields) return null;
+        const field = task.custom_fields.find(f => f.id === FIELD_IDS.ESCALATION_STATUS);
+        return getDropdownValue(field);
     }
 
     // Backend API Service
