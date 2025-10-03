@@ -1264,9 +1264,24 @@ def serve_wait_node_v2():
     """
     # Log page access for security audit
     logger.info(f"Secure page access: wait-node-v2 by {request.user.get('email')}")
-    
+
     # Render the template - query parameters are automatically available in the template
     return render_template('secured/wait-node-v2.html')
+
+
+@app.route('/pages/escalation-v2')
+@login_required
+@rate_limiter.rate_limit(limit='100 per hour')
+def serve_escalation_v2():
+    """
+    Serve escalation-v2 page only to authenticated users
+    Three-panel layout for escalation workflow management
+    """
+    # Log page access for security audit
+    logger.info(f"Secure page access: escalation-v2 by {request.user.get('email')}")
+
+    # Render the template - query parameters are automatically available in the template
+    return render_template('secured/escalation-v2.html')
 
 
 @app.route('/pages/wait-node-editable')
