@@ -43,3 +43,12 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+# Development files (non-deployment)
+Local/
+
+# Symlinks (local paths only)
+claude-agents
+claude-commands
+global-guides
+CLAUDE-*.md
