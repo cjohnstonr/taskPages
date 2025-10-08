@@ -1,0 +1,1832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Process Library Viewer</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com">
+{% raw %}
+
+{% endraw %}
+</script>
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js">
+{% raw %}
+
+{% endraw %}
+</script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">
+{% raw %}
+
+{% endraw %}
+</script>
+
+    <!-- Marked.js for Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js">
+{% raw %}
+
+{% endraw %}
+</script>
+
+    <!-- DOMPurify for sanitization -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js">
+{% raw %}
+
+{% endraw %}
+</script>
+
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js">
+{% raw %}
+
+{% endraw %}
+</script>
+
+    <style>
+      /* Accordion animations */
+      .accordion-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+      }
+
+      .accordion-content.show {
+        max-height: 5000px;
+        transition: max-height 0.5s ease-in;
+      }
+
+      /* Loading spinner */
+      .spinner {
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #10b981;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      /* Markdown content styling */
+      .markdown-content h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        margin-top: 1.5rem;
+        color: #1f2937;
+        border-bottom: 2px solid #e5e7eb;
+        padding-bottom: 0.5rem;
+      }
+
+      .markdown-content h2 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        margin-top: 1.25rem;
+        color: #374151;
+      }
+
+      .markdown-content h3 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        margin-top: 1rem;
+        color: #4b5563;
+      }
+
+      .markdown-content p {
+        margin-bottom: 1rem;
+        line-height: 1.7;
+        color: #4b5563;
+      }
+
+      .markdown-content ul, .markdown-content ol {
+        margin-bottom: 1rem;
+        padding-left: 1.5rem;
+      }
+
+      .markdown-content li {
+        margin-bottom: 0.5rem;
+        line-height: 1.7;
+        color: #4b5563;
+      }
+
+      .markdown-content code {
+        background-color: #f3f4f6;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        font-family: 'Courier New', monospace;
+        font-size: 0.875rem;
+        color: #dc2626;
+      }
+
+      .markdown-content pre {
+        background-color: #1f2937;
+        color: #f3f4f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        overflow-x: auto;
+        margin-bottom: 1rem;
+      }
+
+      .markdown-content pre code {
+        background-color: transparent;
+        color: #f3f4f6;
+        padding: 0;
+      }
+
+      .markdown-content blockquote {
+        border-left: 4px solid #d1d5db;
+        padding-left: 1rem;
+        margin: 1rem 0;
+        color: #6b7280;
+        font-style: italic;
+      }
+
+      .markdown-content strong {
+        font-weight: 600;
+        color: #1f2937;
+      }
+
+      .markdown-content em {
+        font-style: italic;
+      }
+    </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+{% raw %}
+
+    const { useState, useEffect, useMemo } = React;
+
+    // Configuration - Using Python backend
+    // Use same origin since page is served from backend
+    const BACKEND_URL = window.location.origin;
+    const PROCESS_LIBRARY_TYPE = 1018; // custom_item_id for Process Library tasks
+
+    // Custom field IDs
+    const FIELD_IDS = {
+        WAIT_CONFIG: '993f6a27-54e9-4901-a846-20f87a8694b0',
+        WAIT_STATUS: '02486fba-7ddc-49fa-a18e-7a772d23132a',
+        AI_PROPOSED_ACTION: '6c4ca5f9-d9eb-453a-8058-2cdfe40b0ea0',
+        AI_PROPOSED_VALUE: '3c28debd-e8ea-446b-b145-afd982ffe9ce',
+        PROCESS_TEXT: 'b2587292-c1bc-4ee0-8dcb-a69db68d5fe8',
+        ACCUMULATIVE_CONTEXT: '08cb7050-9860-44c8-960c-30862004f95b',
+        STEP_INSIGHTS: 'd6fe462e-d163-488a-af80-7861c42c789b',
+        STEP_NUMBER: '68441ecb-470b-441c-ae24-916688595c05',
+        EXECUTED: '13d4d660-432d-4033-9805-2ffc7d793c92',
+        HUMAN_APPROVED_ACTION: 'a441971f-6fa4-41fd-91d9-e38b31266698',
+        HUMAN_APPROVED_VALUE: '6f6830f9-90f8-4614-a75d-0ab708c245b9',
+        HUMAN_WAIT_OVERRIDE_INPUT: '7572d842-235f-4bb1-8fb0-8ad47ad1ec5a',
+        WAIT_STATUS_EXECUTING: '833db1b3-8557-4a09-b5ed-5183f90e439b',
+        LIBRARY_LEVEL: 'e49ccff6-f042-4e47-b452-0812ba128cfb',
+        // MCP Fields
+        MCP_NAME: '5e2e416b-7ee8-4984-859b-c70c86c4d042',
+        MCP_EXPECTED_ACTION: '56db1b14-75cb-42d9-bd38-45362d974516'
+    };
+
+    // Helper function to extract URL parameters
+    function getUrlParams() {
+        const searchParams = window.location.search ?
+            new URLSearchParams(window.location.search) :
+            new URLSearchParams(window.parent?.location.search || '');
+
+        const params = {};
+        for (const [key, value] of searchParams.entries()) {
+            params[key] = value.trim();
+        }
+        return params;
+    }
+
+    // Helper to find custom field value
+    function getCustomField(task, fieldId) {
+        if (!task || !task.custom_fields) return null;
+        const field = task.custom_fields.find(f => f.id === fieldId);
+        return field?.value || field?.value_richtext || null;
+    }
+
+    // Backend API Service
+    class WaitNodeAPI {
+        constructor() {
+            this.baseUrl = BACKEND_URL;
+        }
+
+        // Removed getAuthToken - using session cookies instead
+
+        async checkAuthentication() {
+            // For backend-served pages, we're on same origin as the API
+            // Session cookie will automatically be included
+            try {
+                const res = await fetch('/auth/status', {
+                    credentials: 'include',  // Include session cookie
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (res.status === 401) {
+                    console.log('Not authenticated, redirecting to login...');
+                    window.location.href = '/auth/login';
+                    return false;
+                }
+                
+                const data = await res.json();
+                if (data.authenticated) {
+                    console.log('Authenticated via session cookie');
+                    return true;
+                }
+            } catch (error) {
+                console.error('Auth check failed:', error);
+            }
+            
+            // Not authenticated, redirect to login
+            window.location.href = '/auth/login';
+            return false;
+        }
+
+        async request(endpoint, options = {}) {
+            try {
+                const response = await fetch(`${this.baseUrl}${endpoint}`, {
+                    ...options,
+                    credentials: 'include',  // Always include cookies for same-origin
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                
+                // Handle authentication errors
+                if (response.status === 401) {
+                    console.error('Authentication failed, redirecting to login...');
+                    window.location.href = '/auth/login';
+                    throw new Error('Authentication failed');
+                }
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`API error: ${response.status} - ${JSON.stringify(errorData)}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('Backend API request failed:', error);
+                throw error;
+            }
+        }
+
+        // Get task details
+        async getTask(taskId, params = {}) {
+            const queryString = new URLSearchParams(params).toString();
+            return this.request(`/api/task/${taskId}${queryString ? '?' + queryString : ''}`);
+        }
+
+        // Initialize wait node with all data
+        async initializeWaitNode(taskId) {
+            return this.request(`/api/wait-node/initialize/${taskId}`);
+        }
+
+        // Submit approval
+        async submitApproval(taskId, approvalData) {
+            return this.request(`/api/wait-node/approve/${taskId}`, {
+                method: 'POST',
+                body: JSON.stringify(approvalData)
+            });
+        }
+    }
+
+    // Create global API instance
+    const api = new WaitNodeAPI();
+
+    // NOTE: findProcessLibraryRoot is now handled by the backend
+    // The backend's initializeWaitNode endpoint includes this logic
+
+    // NOTE: fetchSubtasksWithDetails is now handled by the backend
+    // The backend's initializeWaitNode endpoint includes this logic
+
+    // Helper function to render markdown
+    function renderMarkdown(text) {
+        if (!text) return '';
+        return DOMPurify.sanitize(marked.parse(text));
+    }
+
+    // Process Steps Accordion Component
+    function ProcessStepsAccordion({ subtasks }) {
+        const [expandedSteps, setExpandedSteps] = useState({});
+
+        const handleExpand = (taskId) => {
+            setExpandedSteps(prev => ({
+                ...prev,
+                [taskId]: !prev[taskId]
+            }));
+        };
+
+        if (!subtasks || subtasks.length === 0) {
+            return (
+                <div className="bg-white border-b border-gray-200 p-6">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-5">
+                        📝 Process Steps
+                    </h3>
+                    <p className="text-gray-400 italic font-light">No process steps found</p>
+                </div>
+            );
+        }
+
+        return (
+            <div className="bg-white border-b border-gray-200 p-6">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-5 flex items-center gap-3">
+                    📝 Process Steps
+                    <span className="ml-auto text-sm font-normal text-gray-500">{subtasks.length} total steps</span>
+                </h3>
+
+                <div style={{display: 'flex', flexDirection: 'column', gap: '0'}}>
+                    {subtasks.map((subtask) => {
+                        const stepNumber = getCustomField(subtask, FIELD_IDS.STEP_NUMBER) || '?';
+                        const stepInsights = getCustomField(subtask, FIELD_IDS.STEP_INSIGHTS);
+                        const executed = getCustomField(subtask, FIELD_IDS.EXECUTED);
+                        const hasContent = stepInsights || subtask.description;
+                        const stepName = subtask?.name || ''
+
+                        const libraryLevelObj = subtask.custom_fields.find(e=>e.id === FIELD_IDS.LIBRARY_LEVEL)
+                        const libraryLevelValue = libraryLevelObj?.value || null;
+                        const optionsLibrary = libraryLevelObj?.type_
+                            ?.options || [];
+                        const elibrary = optionsLibrary.find(e => e.orderindex === libraryLevelValue)
+                        const libraryLevel = elibrary?.name || ''
+
+
+
+                        return (
+                            <div key={subtask.id} className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                                <button
+                                    onClick={() => handleExpand(subtask.id)}
+                                    className={`w-full px-4 py-3 text-left bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-inset transition-colors duration-200 ${
+                                        expandedSteps[subtask.id] ? 'bg-emerald-50' : ''
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center space-x-3">
+                                                <span className={`text-lg ${executed ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                                    {executed ? '✅' : libraryLevel === 'Wait' ? '⏳' : '❌'}
+                                                </span>
+                                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                                                    Step {stepNumber}
+                                                </span>
+                                            {subtask.custom_id && (
+                                                <a
+                                                    href={`https://app.clickup.com/t/${subtask.id}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-mono transition-colors duration-200"
+                                                    title={`Open task ${subtask.custom_id} in ClickUp`}
+                                                >
+                                                    {subtask.custom_id}
+                                                </a>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                            {hasContent && (
+                                                <span
+                                                    className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
+                                                        Has insights
+                                                    </span>
+                                            )}
+                                            <span
+                                                className={`transform transition-transform duration-200 text-gray-400 ${
+                                                    expandedSteps[subtask.id] ? 'rotate-180' : ''
+                                                }`}>
+                                                    ▼
+                                                </span>
+                                        </div>
+                                    </div>
+                                </button>
+
+                                <div className={`accordion-content ${expandedSteps[subtask.id] ? 'show' : ''}`}>
+                                    {expandedSteps[subtask.id] && (
+                                        <div className="bg-white border-t border-gray-200">
+                                            <div className="p-4">
+                                                <div className="mb-4 pb-3 border-b border-gray-200">
+                                                    <div className="mb-2">
+                                                        <span className="font-medium text-gray-600">Task Name: </span>
+                                                        <span className="font-mono text-gray-900">{stepName}</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2 text-sm">
+                                                        <div>
+                                                            <span className="font-medium text-gray-600">Task ID: </span>
+                                                            <span className="font-mono text-gray-900">{subtask.id}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="font-medium text-gray-600">Status: </span>
+                                                            <span className="text-gray-900">{subtask.status?.status || 'Unknown'}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="font-medium text-gray-600">Step Number: </span>
+                                                            <span className="text-gray-900">{stepNumber}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="font-medium text-gray-600">Executed: </span>
+                                                            <span className={executed ? 'text-green-600' : 'text-gray-400'}>
+                                                                    {executed ? 'Yes' : 'No'}
+                                                                </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {stepInsights && (
+                                                    <div className="mb-4">
+                                                        <h4 className="font-medium text-gray-700 mb-2">Step Insights:</h4>
+                                                        <div
+                                                            className="markdown-content bg-gray-50 p-4 rounded-lg"
+                                                            dangerouslySetInnerHTML={{
+                                                                __html: DOMPurify.sanitize(marked.parse(stepInsights))
+                                                            }}
+                                                        />
+                                                    </div>
+                                                )}
+
+
+                                                {!stepInsights && !subtask.description && (
+                                                    <p className="text-gray-500 italic">No execution data available for this step</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    }
+
+
+    function cleanJSON(value) {
+        // Handle null/undefined values
+        if (!value) {
+            return null;
+        }
+        
+        let cleaned = value.trim();
+
+        // Remover comillas externas dobles y simples
+        if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+            cleaned = cleaned.slice(1, -1);
+        }
+        if (cleaned.startsWith("'") && cleaned.endsWith("'")) {
+            cleaned = cleaned.slice(1, -1);
+        }
+
+        // Desescapar los caracteres que ClickUp duplicó
+        cleaned = cleaned.replace(/\\"/g, '"');      // \" -> "
+        cleaned = cleaned.replace(/\\\\/g, '\\');    // \\\\ -> \\
+
+        try {
+            return JSON.parse(cleaned.trim());
+        } catch (e) {
+            console.warn('Failed to parse JSON config:', e);
+            return null;
+        }
+    }
+
+    // Approval Module Component
+    function ApprovalModule({ taskData, onSuccess }) {
+        const [formData, setFormData] = useState({});
+        const [submitting, setSubmitting] = useState(false);
+        const [error, setError] = useState(null);
+        const [verifying, setVerifying] = useState(false);
+
+        // Extract relevant fields
+        const waitConfig = useMemo(() => {
+            const configString = getCustomField(taskData, FIELD_IDS.WAIT_CONFIG);
+            return configString ? cleanJSON(configString) : null;
+        }, [taskData]);
+        
+        // Check if this is actually a wait node
+        const isWaitNode = waitConfig !== null;
+
+        const aiProposedAction = getCustomField(taskData, FIELD_IDS.AI_PROPOSED_ACTION) || 'No action proposed';
+        const aiProposedValue = getCustomField(taskData, FIELD_IDS.AI_PROPOSED_VALUE) || '';
+        const waitStatus = getCustomField(taskData, FIELD_IDS.WAIT_STATUS);
+
+        // Map numeric values to status IDs
+        const STATUS_MAP = {
+            0: '1a875730-5268-4c3b-9066-5e118093e654', // Initializing
+            1: 'b88659bd-8306-40d5-b851-d3a075a0b18d', // Waiting
+            2: '4f8482dc-6072-4d28-a66b-ef2cbb062400', // Evaluating
+            3: '833db1b3-8557-4a09-b5ed-5183f90e439b', // Executing
+            4: 'd1afd0c0-0d96-4363-b60e-73b5135da5df', // Waiting_Human_Approval
+            5: '39c26799-0fcb-446c-9045-a8ee22a4a095', // Completed
+            6: '1f93daab-b421-4d0b-ba1e-a1b762daf08a'  // Error
+        };
+
+        // Convert numeric value to UUID if needed
+        const normalizedStatus = typeof waitStatus === 'number' ? STATUS_MAP[waitStatus] : waitStatus;
+
+        // Check if already processed
+        if (normalizedStatus === '39c26799-0fcb-446c-9045-a8ee22a4a095' || // Completed
+            normalizedStatus === '833db1b3-8557-4a09-b5ed-5183f90e439b') { // Executing
+            return (
+                <div className="p-6 bg-green-50 border-b border-green-200">
+                    <div className="flex items-center space-x-3">
+                        <span className="text-green-600 text-2xl">✅</span>
+                        <div>
+                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Already Processed</h3>
+                            <p className="text-green-700">This approval has already been submitted.</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Check if not ready for human approval
+        if (normalizedStatus !== 'd1afd0c0-0d96-4363-b60e-73b5135da5df') { // Not Waiting_Human_Approval
+            const statusLabel = normalizedStatus === '1a875730-5268-4c3b-9066-5e118093e654' ? 'Initializing' :
+                normalizedStatus === 'b88659bd-8306-40d5-b851-d3a075a0b18d' ? 'Waiting' :
+                    normalizedStatus === '4f8482dc-6072-4d28-a66b-ef2cbb062400' ? 'Evaluating' :
+                        normalizedStatus === '1f93daab-b421-4d0b-ba1e-a1b762daf08a' ? 'Error' :
+                            waitStatus === 0 ? 'Initializing' :
+                                waitStatus === 1 ? 'Waiting' :
+                                    waitStatus === 2 ? 'Evaluating' :
+                                        waitStatus === 6 ? 'Error' :
+                                            'Unknown';
+
+            return (
+                <div className="p-6 bg-yellow-50 border-b border-yellow-200">
+                    <div className="flex items-center space-x-3">
+                        <span className="text-yellow-600 text-2xl">⏳</span>
+                        <div>
+                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Not Ready for Approval</h3>
+                            <p className="text-yellow-700">
+                                This task is not currently awaiting human approval.
+                                Current status: <strong>{statusLabel}</strong>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // NOTE: updateCustomField is now handled by the backend's submitApproval endpoint
+        // Individual field updates are batched together for better performance
+
+        // Handle form submission
+        async function handleSubmit() {
+            setSubmitting(true);
+            setError(null);
+
+            try {
+                // Determine what to submit based on interface type
+                let valueToSubmit = '';
+
+                switch (waitConfig.human_approval_type) {
+                    case 'text':
+                        valueToSubmit = formData.textValue || aiProposedValue;
+                        break;
+
+                    case 'multiple_choice':
+                        valueToSubmit = formData.comment || formData.selectedOption || '';
+                        break;
+
+                    case 'structured':
+                        valueToSubmit = JSON.stringify(formData);
+                        break;
+
+                    case 'binary':
+                        valueToSubmit = formData.comment || formData.decision || '';
+                        break;
+
+                    default:
+                        valueToSubmit = formData.textValue || '';
+                }
+
+                // Prepare approval data for backend
+                const approvalData = {
+                    [FIELD_IDS.HUMAN_APPROVED_ACTION]: aiProposedAction,
+                    [FIELD_IDS.HUMAN_APPROVED_VALUE]: valueToSubmit,
+                    [FIELD_IDS.WAIT_STATUS]: 3 // Executing (numeric value)
+                };
+
+                // Submit approval through backend
+                setVerifying(true);
+                const result = await api.submitApproval(taskData.id, approvalData);
+                
+                // Backend returns the verified task data
+                const newStatus = getCustomField(result.task, FIELD_IDS.WAIT_STATUS);
+                const savedValue = getCustomField(result.task, FIELD_IDS.HUMAN_APPROVED_VALUE);
+
+                // Check both numeric and UUID values
+                if (newStatus === 3 || newStatus === '833db1b3-8557-4a09-b5ed-5183f90e439b' || savedValue === valueToSubmit) {
+                    if (onSuccess) onSuccess();
+                    // Show success in the component itself
+                    setFormData({ ...formData, submitted: true });
+                } else {
+                    throw new Error('Update verification failed - fields may not have saved correctly');
+                }
+
+            } catch (err) {
+                console.error('Submission error:', err);
+                setError(err.message);
+            } finally {
+                setSubmitting(false);
+                setVerifying(false);
+            }
+        }
+
+        // Render dynamic form based on wait_config type
+        function renderFormInterface() {
+            switch (waitConfig.human_approval_type) {
+                case 'multiple_choice':
+                    return (
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    {waitConfig.prompt || 'Select an option:'}
+                                </label>
+                                <select
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    onChange={(e) => setFormData({ ...formData, selectedOption: e.target.value })}
+                                    defaultValue=""
+                                >
+                                    <option value="" disabled>Choose an option...</option>
+                                    {(waitConfig.options || []).map(option => (
+                                        <option key={option} value={option}>{option}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            {waitConfig.allow_comment && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Additional Comments (optional):
+                                    </label>
+                                    <textarea
+                                        className="w-full h-24 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
+                                        placeholder="Add any additional context..."
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    );
+
+                case 'structured':
+                    return (
+                        <div className="space-y-4">
+                            {(waitConfig.fields || []).map(field => (
+                                <div key={field.name}>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        {field.label || field.name}
+                                        {field.required && <span className="text-red-500 ml-1">*</span>}
+                                    </label>
+                                    {field.type === 'checkbox' ? (
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                            onChange={(e) => setFormData({ ...formData, [field.name]: e.target.checked })}
+                                        />
+                                    ) : (
+                                        <input
+                                            type={field.type || 'text'}
+                                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                            required={field.required}
+                                            defaultValue={field.default || ''}
+                                            onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
+                                        />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    );
+
+                case 'binary':
+                    return (
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-3">
+                                    {waitConfig.question || 'Do you approve?'}
+                                </label>
+                                <select
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    onChange={(e) => setFormData({ ...formData, decision: e.target.value })}
+                                    defaultValue=""
+                                >
+                                    <option value="" disabled>Make a decision...</option>
+                                    <option value="approved">{waitConfig.yes_label || 'Approve'}</option>
+                                    <option value="rejected">{waitConfig.no_label || 'Reject'}</option>
+                                </select>
+                            </div>
+                            {(waitConfig.require_comment_on_no && formData.decision === 'rejected') && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Please provide a reason for rejection:
+                                    </label>
+                                    <textarea
+                                        className="w-full h-24 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
+                                        required
+                                        placeholder="Explain why this was rejected..."
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    );
+
+                case 'text':
+                default:
+                    return (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Review and modify the proposed value:
+                            </label>
+                            <textarea
+                                className="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                defaultValue={aiProposedValue}
+                                onChange={(e) => setFormData({ ...formData, textValue: e.target.value })}
+                                placeholder={waitConfig.placeholder || 'Enter your response...'}
+                            />
+                        </div>
+                    );
+            }
+        }
+
+        if (formData.submitted) {
+            return (
+                <div className="p-6 bg-green-50 border-b border-green-200">
+                    <div className="flex items-center space-x-3">
+                        <span className="text-green-600 text-3xl">✅</span>
+                        <div>
+                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Successfully Submitted</h3>
+                            <p className="text-green-700">Your approval has been recorded and the process will continue.</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="bg-white border-b border-gray-200">
+                {/* AI Proposal Section */}
+                <div className="p-6 bg-gray-50 border-b border-gray-200">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">🤖 AI Recommendation</h3>
+                    <div className="space-y-3">
+                        <div>
+                            <span className="text-sm font-medium text-gray-600">Proposed Action:</span>
+                            <div className="mt-1 p-3 bg-white rounded-lg border border-gray-200">
+                                <code className="text-sm text-gray-900">{aiProposedAction}</code>
+                            </div>
+                        </div>
+                        {aiProposedValue && (
+                            <div>
+                                <span className="text-sm font-medium text-gray-600">Proposed Value:</span>
+                                <div className="mt-1 p-3 bg-white rounded-lg border border-gray-200">
+                                    <pre className="text-sm text-gray-900 whitespace-pre-wrap">{aiProposedValue}</pre>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Human Approval Section */}
+                <div className="p-6 bg-white border-b border-gray-200">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">✍️ Your Decision</h3>
+
+                    {renderFormInterface()}
+
+                    {error && (
+                        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                            <p className="text-red-700 text-sm">{error}</p>
+                        </div>
+                    )}
+
+                    <div className="mt-6 flex space-x-3">
+                        <button
+                            onClick={handleSubmit}
+                            disabled={submitting || verifying}
+                            className="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            {submitting ? 'Submitting...' : verifying ? 'Verifying...' : 'Submit Approval'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Comments Section Component
+    function CommentsSection({ mainTask }) {
+        const [comments, setComments] = useState([]);
+        const [loading, setLoading] = useState(false);
+        const [hasMore, setHasMore] = useState(false);
+        const [expanded, setExpanded] = useState(false);
+        const [expandedComments, setExpandedComments] = useState(new Set());
+
+        // Fetch comments when component mounts or mainTask changes
+        useEffect(() => {
+            if (mainTask && mainTask.id) {
+                loadInitialComments();
+            }
+        }, [mainTask]);
+
+        const loadInitialComments = async () => {
+            console.log('🔍 [MAIN COMMENTS] loadInitialComments called');
+            console.log('🔍 [MAIN COMMENTS] mainTask:', mainTask);
+            console.log('🔍 [MAIN COMMENTS] mainTask.id:', mainTask?.id);
+            
+            if (!mainTask || !mainTask.id) {
+                console.warn('⚠️ [MAIN COMMENTS] No main task or ID available');
+                return;
+            }
+            
+            const commentsUrl = `${BACKEND_URL}/api/task/${mainTask.id}/comments?limit=5`;
+            console.log('🔍 [MAIN COMMENTS] API URL:', commentsUrl);
+            
+            setLoading(true);
+            try {
+                // Use session cookie authentication, not localStorage token
+                const response = await fetch(commentsUrl, {
+                    credentials: 'include',  // Include session cookie
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                console.log('🔍 [MAIN COMMENTS] Response status:', response.status);
+                console.log('🔍 [MAIN COMMENTS] Response ok:', response.ok);
+                
+                if (response.status === 401) {
+                    console.warn('⚠️ [MAIN COMMENTS] 401 Unauthorized, redirecting to login');
+                    // Not authenticated, redirect to login
+                    window.location.href = '/auth/login';
+                    return;
+                }
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('🔍 [MAIN COMMENTS] Response data:', data);
+                    console.log('🔍 [MAIN COMMENTS] Comments array:', data.comments);
+                    console.log('🔍 [MAIN COMMENTS] Comments count:', data.comments?.length || 0);
+                    console.log('🔍 [MAIN COMMENTS] Has more:', data.has_more);
+                    setComments(data.comments || []);
+                    setHasMore(data.has_more || false);
+                } else {
+                    const errorText = await response.text();
+                    console.error('❌ [MAIN COMMENTS] Failed to fetch comments:', response.status, response.statusText);
+                    console.error('❌ [MAIN COMMENTS] Error response body:', errorText);
+                }
+            } catch (error) {
+                console.error('❌ [MAIN COMMENTS] Error fetching comments:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const loadMoreComments = async () => {
+            if (!mainTask || !mainTask.id || loading) return;
+            
+            setLoading(true);
+            try {
+                // Use session cookie authentication, not localStorage token
+                const response = await fetch(`${BACKEND_URL}/api/task/${mainTask.id}/comments?start=${comments.length}&limit=5`, {
+                    credentials: 'include',  // Include session cookie
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+                if (response.status === 401) {
+                    // Not authenticated, redirect to login
+                    window.location.href = '/auth/login';
+                    return;
+                }
+                if (response.ok) {
+                    const data = await response.json();
+                    setComments(prev => [...prev, ...(data.comments || [])]);
+                    setHasMore(data.has_more || false);
+                }
+            } catch (error) {
+                console.error('Error loading more comments:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const toggleCommentExpansion = (commentId) => {
+            setExpandedComments(prev => {
+                const newSet = new Set(prev);
+                if (newSet.has(commentId)) {
+                    newSet.delete(commentId);
+                } else {
+                    newSet.add(commentId);
+                }
+                return newSet;
+            });
+        };
+
+        if (!mainTask) return null;
+
+        return (
+            <div className="border-t border-gray-200 bg-white">
+                <div 
+                    className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                    onClick={() => setExpanded(!expanded)}
+                >
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Recent Activity
+                            {comments.length > 0 && (
+                                <span className="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs font-normal">
+                                    {comments.length}
+                                </span>
+                            )}
+                        </h3>
+                        <svg 
+                            className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`}
+                            fill="none" 
+                            stroke="currentColor" 
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                    </div>
+                </div>
+
+                {expanded && (
+                    <div className="px-4 pb-4">
+                        {(() => {
+                            console.log('🔍 [MAIN COMMENTS RENDER] Rendering comments section');
+                            console.log('🔍 [MAIN COMMENTS RENDER] loading:', loading);
+                            console.log('🔍 [MAIN COMMENTS RENDER] comments:', comments);
+                            console.log('🔍 [MAIN COMMENTS RENDER] comments.length:', comments.length);
+                            console.log('🔍 [MAIN COMMENTS RENDER] expanded:', expanded);
+                            return null;
+                        })()}
+                        {loading && comments.length === 0 ? (
+                            <div className="text-center py-4 text-gray-500 text-sm">
+                                Loading comments...
+                            </div>
+                        ) : comments.length === 0 ? (
+                            <div className="text-center py-4 text-gray-500 text-sm">
+                                No comments yet
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {comments.map((comment) => (
+                                    <div key={comment.id} className="border-l-2 border-gray-200 pl-3">
+                                        <div className="flex items-start gap-2">
+                                            <div 
+                                                className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium text-white flex-shrink-0"
+                                                style={{ backgroundColor: comment.user.color || '#808080' }}
+                                            >
+                                                {comment.user.initials}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                    <span className="font-medium">{comment.user.username}</span>
+                                                    <span>•</span>
+                                                    <span>{comment.date_formatted}</span>
+                                                </div>
+                                                <div className="text-sm text-gray-700 mt-1 break-words">
+                                                    {comment.text.length > 100 ? (
+                                                        <>
+                                                            {expandedComments.has(comment.id) 
+                                                                ? comment.text 
+                                                                : `${comment.text.substring(0, 100)}...`
+                                                            }
+                                                            <button 
+                                                                onClick={() => toggleCommentExpansion(comment.id)}
+                                                                className="text-blue-600 text-xs ml-1 hover:underline cursor-pointer"
+                                                            >
+                                                                {expandedComments.has(comment.id) ? 'show less' : 'show more'}
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        comment.text
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {hasMore && (
+                                    <div className="text-center pt-2">
+                                        <button
+                                            onClick={loadMoreComments}
+                                            disabled={loading}
+                                            className="text-xs text-blue-600 hover:text-blue-800 hover:underline disabled:opacity-50"
+                                        >
+                                            {loading ? 'Loading...' : 'Load more'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // Step Details Panel Component (Right Panel)
+    function StepDetailsPanel({ subtasks, selectedStepId, onStepSelect }) {
+        const [selectedStep, setSelectedStep] = useState(null);
+        const [stepComments, setStepComments] = useState([]);
+        const [loadingComments, setLoadingComments] = useState(false);
+        const [hasMoreComments, setHasMoreComments] = useState(false);
+        const [sectionsExpanded, setSectionsExpanded] = useState({
+            description: false,    // Collapsed by default
+            processText: true,     // Expanded by default  
+            mcpInfo: true,         // Expanded by default
+            comments: true         // Expanded by default
+        });
+
+        // Update selected step when selection changes
+        useEffect(() => {
+            if (selectedStepId && subtasks) {
+                const step = subtasks.find(s => s.id === selectedStepId);
+                setSelectedStep(step);
+                if (step) {
+                    loadStepComments(step.id);
+                }
+            }
+        }, [selectedStepId, subtasks]);
+
+        const loadStepComments = async (stepId) => {
+            console.log('🔍 [STEP COMMENTS] loadStepComments called for stepId:', stepId);
+            
+            setLoadingComments(true);
+            try {
+                const commentsUrl = `${BACKEND_URL}/api/task/${stepId}/comments?limit=5`;
+                console.log('🔍 [STEP COMMENTS] API URL:', commentsUrl);
+                
+                // Use session cookie authentication, not localStorage token
+                const response = await fetch(commentsUrl, {
+                    credentials: 'include',  // Include session cookie
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                console.log('🔍 [STEP COMMENTS] Response status:', response.status);
+                console.log('🔍 [STEP COMMENTS] Response ok:', response.ok);
+                
+                if (response.status === 401) {
+                    console.warn('⚠️ [STEP COMMENTS] 401 Unauthorized, redirecting to login');
+                    // Not authenticated, redirect to login
+                    window.location.href = '/auth/login';
+                    return;
+                }
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('🔍 [STEP COMMENTS] Response data:', data);
+                    console.log('🔍 [STEP COMMENTS] Comments array:', data.comments);
+                    console.log('🔍 [STEP COMMENTS] Comments count:', data.comments?.length || 0);
+                    console.log('🔍 [STEP COMMENTS] Has more:', data.has_more);
+                    setStepComments(data.comments || []);
+                    setHasMoreComments(data.has_more || false);
+                } else {
+                    const errorText = await response.text();
+                    console.error('❌ [STEP COMMENTS] Failed to fetch comments:', response.status, response.statusText);
+                    console.error('❌ [STEP COMMENTS] Error response body:', errorText);
+                }
+            } catch (error) {
+                console.error('❌ [STEP COMMENTS] Error loading step comments:', error);
+                setStepComments([]);
+            } finally {
+                setLoadingComments(false);
+            }
+        };
+
+        const loadMoreStepComments = async () => {
+            if (!selectedStep || loadingComments) return;
+            
+            setLoadingComments(true);
+            try {
+                // Use session cookie authentication, not localStorage token
+                const response = await fetch(`${BACKEND_URL}/api/task/${selectedStep.id}/comments?start=${stepComments.length}&limit=5`, {
+                    credentials: 'include',  // Include session cookie
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+                if (response.status === 401) {
+                    // Not authenticated, redirect to login
+                    window.location.href = '/auth/login';
+                    return;
+                }
+                if (response.ok) {
+                    const data = await response.json();
+                    setStepComments(prev => [...prev, ...(data.comments || [])]);
+                    setHasMoreComments(data.has_more || false);
+                }
+            } catch (error) {
+                console.error('Error loading more step comments:', error);
+            } finally {
+                setLoadingComments(false);
+            }
+        };
+
+        const toggleSection = (section) => {
+            setSectionsExpanded(prev => ({
+                ...prev,
+                [section]: !prev[section]
+            }));
+        };
+
+        const handleStepChange = (e) => {
+            const stepId = e.target.value;
+            if (stepId && onStepSelect) {
+                onStepSelect(stepId);
+            }
+        };
+
+        if (!subtasks || subtasks.length === 0) {
+            return (
+                <div className="w-96 bg-gray-50 shadow-xl h-full overflow-y-auto border-l border-gray-200">
+                    <div className="bg-white border-b border-gray-200 p-4">
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">📋 Step Details</h3>
+                    </div>
+                    <div className="p-6 text-center text-gray-500">
+                        <p>No steps available</p>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="w-96 bg-gray-50 shadow-xl h-full overflow-y-auto border-l border-gray-200">
+                {/* Header */}
+                <div className="bg-white border-b border-gray-200 p-4">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">📋 Step Details</h3>
+                    
+                    {/* Step Selector Dropdown */}
+                    <select 
+                        value={selectedStep?.id || ''}
+                        onChange={handleStepChange}
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="" className="text-gray-800">Select a step...</option>
+                        {subtasks.map((step) => {
+                            const stepNumber = getCustomField(step, FIELD_IDS.STEP_NUMBER) || '?';
+                            return (
+                                <option key={step.id} value={step.id} className="text-gray-800">
+                                    Step {stepNumber}: {step.name}
+                                </option>
+                            );
+                        })}
+                    </select>
+                </div>
+
+                {selectedStep ? (
+                    <div className="p-4 space-y-4">
+                        {/* Step Info */}
+                        <div className="bg-white border-b border-gray-200 p-4">
+                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Current Step</h4>
+                            <div className="font-semibold text-gray-900">
+                                Step {getCustomField(selectedStep, FIELD_IDS.STEP_NUMBER) || '?'} - {selectedStep.name}
+                            </div>
+                        </div>
+
+                        {/* Task Description Section */}
+                        {selectedStep.description && (
+                            <div className="bg-white border-b border-gray-200">
+                                <div 
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                    onClick={() => toggleSection('description')}
+                                >
+                                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">📝 Task Description</span>
+                                    <span className="text-gray-400">
+                                        {sectionsExpanded.description ? '▼' : '▶'}
+                                    </span>
+                                </div>
+                                {sectionsExpanded.description && (
+                                    <div className="p-4 prose prose-sm max-w-none">
+                                        <div dangerouslySetInnerHTML={{
+                                            __html: DOMPurify.sanitize(marked.parse(selectedStep.description))
+                                        }} />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Process Text Section */}
+                        {getCustomField(selectedStep, FIELD_IDS.PROCESS_TEXT) && (
+                            <div className="bg-white border-b border-gray-200">
+                                <div 
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                    onClick={() => toggleSection('processText')}
+                                >
+                                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">🔧 Process Text</span>
+                                    <span className="text-gray-400">
+                                        {sectionsExpanded.processText ? '▼' : '▶'}
+                                    </span>
+                                </div>
+                                {sectionsExpanded.processText && (
+                                    <div className="p-4 prose prose-sm max-w-none">
+                                        <div dangerouslySetInnerHTML={{
+                                            __html: DOMPurify.sanitize(marked.parse(getCustomField(selectedStep, FIELD_IDS.PROCESS_TEXT)))
+                                        }} />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* MCP Information Section */}
+                        {(getCustomField(selectedStep, FIELD_IDS.MCP_NAME) || getCustomField(selectedStep, FIELD_IDS.MCP_EXPECTED_ACTION)) && (
+                            <div className="bg-white border-b border-gray-200">
+                                <div 
+                                    className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                    onClick={() => toggleSection('mcpInfo')}
+                                >
+                                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">🤖 MCP Information</span>
+                                    <span className="text-gray-400">
+                                        {sectionsExpanded.mcpInfo ? '▼' : '▶'}
+                                    </span>
+                                </div>
+                                {sectionsExpanded.mcpInfo && (
+                                    <div className="p-4 space-y-2">
+                                        <div>
+                                            <span className="text-sm font-medium text-gray-500">Client/Tool:</span>{' '}
+                                            <span className="text-sm text-gray-900">
+                                                {getCustomField(selectedStep, FIELD_IDS.MCP_NAME) || 'Not specified'}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className="text-sm font-medium text-gray-500">Action:</span>{' '}
+                                            <span className="text-sm text-gray-900">
+                                                {getCustomField(selectedStep, FIELD_IDS.MCP_EXPECTED_ACTION) || 'Not specified'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Step Comments Section */}
+                        <div className="bg-white border-b border-gray-200">
+                            <div 
+                                className="px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                onClick={() => toggleSection('comments')}
+                            >
+                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                    💬 Step Comments
+                                    {stepComments.length > 0 && (
+                                        <span className="ml-2 bg-gray-600 text-white text-xs px-2 py-0.5 rounded-full">
+                                            {stepComments.length}
+                                        </span>
+                                    )}
+                                </span>
+                                <span className="text-gray-400">
+                                    {sectionsExpanded.comments ? '▼' : '▶'}
+                                </span>
+                            </div>
+                            {sectionsExpanded.comments && (
+                                <div className="p-4">
+                                    {(() => {
+                                        console.log('🔍 [STEP COMMENTS RENDER] Rendering step comments section');
+                                        console.log('🔍 [STEP COMMENTS RENDER] loadingComments:', loadingComments);
+                                        console.log('🔍 [STEP COMMENTS RENDER] stepComments:', stepComments);
+                                        console.log('🔍 [STEP COMMENTS RENDER] stepComments.length:', stepComments.length);
+                                        console.log('🔍 [STEP COMMENTS RENDER] selectedStep:', selectedStep);
+                                        console.log('🔍 [STEP COMMENTS RENDER] sectionsExpanded.comments:', sectionsExpanded.comments);
+                                        return null;
+                                    })()}
+                                    {loadingComments && stepComments.length === 0 ? (
+                                        <p className="text-gray-500 text-sm">Loading comments...</p>
+                                    ) : stepComments.length === 0 ? (
+                                        <p className="text-gray-500 text-sm">No comments for this step</p>
+                                    ) : (
+                                        <>
+                                            <div className="space-y-3">
+                                                {stepComments.map((comment) => (
+                                                    <div key={comment.id} className="border-b pb-3 last:border-b-0">
+                                                        <div className="flex items-start gap-2">
+                                                            <div 
+                                                                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0"
+                                                                style={{ backgroundColor: comment.user?.color || '#808080' }}
+                                                            >
+                                                                {comment.user?.initials || '??'}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                                    <span className="font-medium text-gray-700">
+                                                                        {comment.user?.username || 'Unknown'}
+                                                                    </span>
+                                                                    <span>•</span>
+                                                                    <span>{comment.date_formatted}</span>
+                                                                </div>
+                                                                <div className="mt-1 text-sm text-gray-900 break-words">
+                                                                    {comment.text}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {hasMoreComments && (
+                                                <div className="text-center pt-3">
+                                                    <button 
+                                                        onClick={loadMoreStepComments}
+                                                        disabled={loadingComments}
+                                                        className="text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                                                    >
+                                                        {loadingComments ? 'Loading...' : 'Load More Comments'}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-white border-b border-gray-200 p-6 text-center text-gray-500">
+                        <p>Select a step to view details</p>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // Left Panel Component for Main Task
+    function MainTaskPanel({ mainTask }) {
+        if (!mainTask) return null;
+
+        // Format date
+        const formatDate = (timestamp) => {
+            if (!timestamp) return 'Not set';
+            const date = new Date(parseInt(timestamp));
+            const now = new Date();
+            const diffDays = Math.floor((date - now) / (1000 * 60 * 60 * 24));
+            
+            const formatted = date.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric' 
+            });
+            
+            if (diffDays > 0 && diffDays <= 7) {
+                return `${formatted} (${diffDays} days)`;
+            }
+            return formatted;
+        };
+
+        // Format time estimate
+        const formatTimeEstimate = (ms) => {
+            if (!ms) return 'Not set';
+            const hours = Math.floor(ms / 3600000);
+            const minutes = Math.floor((ms % 3600000) / 60000);
+            if (hours > 0) {
+                return `${hours}h ${minutes}m`;
+            }
+            return `${minutes}m`;
+        };
+
+        // Get priority color
+        const getPriorityColor = (priority) => {
+            if (!priority) return '#6b7280';
+            switch(priority.id) {
+                case '1': return '#ef4444'; // urgent - red
+                case '2': return '#f59e0b'; // high - orange
+                case '3': return '#3b82f6'; // normal - blue
+                case '4': return '#6b7280'; // low - gray
+                default: return '#6b7280';
+            }
+        };
+
+        // Get status color
+        const getStatusColor = (status) => {
+            if (!status) return '#6b7280';
+            return status.color || '#6b7280';
+        };
+
+        return (
+            <div className="h-full bg-gray-50 border-r border-gray-200 overflow-y-auto">
+                {/* Section 1: Task Overview */}
+                <div className="p-4 bg-white border-b border-gray-200">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                        Main Task Context
+                    </h3>
+                    
+                    <div className="space-y-3">
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900 leading-tight">
+                                {mainTask.name}
+                            </h2>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="text-sm text-gray-500">
+                                    {mainTask.custom_id || mainTask.id}
+                                </span>
+                                <a 
+                                    href={`https://app.clickup.com/t/${mainTask.id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:text-blue-800"
+                                    title="Open in ClickUp"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                </a>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                            {mainTask.status && (
+                                <span 
+                                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white"
+                                    style={{ backgroundColor: getStatusColor(mainTask.status) }}
+                                >
+                                    {mainTask.status.status}
+                                </span>
+                            )}
+                            {mainTask.priority && (
+                                <span 
+                                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-white"
+                                    style={{ backgroundColor: getPriorityColor(mainTask.priority) }}
+                                >
+                                    {mainTask.priority.priority}
+                                </span>
+                            )}
+                        </div>
+
+                        {mainTask.due_date && (
+                            <div className="text-sm">
+                                <span className="text-gray-500">Due:</span>{' '}
+                                <span className="font-medium text-gray-900">
+                                    {formatDate(mainTask.due_date)}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Section 2: Assignment & Timeline */}
+                <div className="p-4 bg-white border-b border-gray-200">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                        Assignment & Timeline
+                    </h3>
+                    
+                    <div className="space-y-2">
+                        {mainTask.assignees && mainTask.assignees.length > 0 && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-500">Assigned to:</span>
+                                <div className="flex -space-x-2">
+                                    {mainTask.assignees.map((assignee, idx) => (
+                                        <div
+                                            key={assignee.id}
+                                            className="relative inline-flex items-center justify-center w-8 h-8 rounded-full ring-2 ring-white"
+                                            style={{ backgroundColor: assignee.color || '#6b7280' }}
+                                            title={assignee.username}
+                                        >
+                                            <span className="text-xs font-medium text-white">
+                                                {assignee.initials}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <span className="text-sm font-medium text-gray-900">
+                                    {mainTask.assignees.map(a => a.username).join(', ')}
+                                </span>
+                            </div>
+                        )}
+
+                        {mainTask.time_estimate && (
+                            <div className="text-sm">
+                                <span className="text-gray-500">Time estimate:</span>{' '}
+                                <span className="font-medium text-gray-900">
+                                    {formatTimeEstimate(mainTask.time_estimate)}
+                                </span>
+                            </div>
+                        )}
+
+                        {mainTask.start_date && (
+                            <div className="text-sm">
+                                <span className="text-gray-500">Start:</span>{' '}
+                                <span className="font-medium text-gray-900">
+                                    {formatDate(mainTask.start_date)}
+                                </span>
+                            </div>
+                        )}
+
+                        {mainTask.tags && mainTask.tags.length > 0 && (
+                            <div className="pt-2">
+                                <div className="flex flex-wrap gap-1">
+                                    {mainTask.tags.map((tag, idx) => (
+                                        <span
+                                            key={idx}
+                                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                                            style={{ 
+                                                backgroundColor: `${tag.tag_bg}20`,
+                                                color: tag.tag_fg 
+                                            }}
+                                        >
+                                            {tag.name}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Section 3: Task Description */}
+                {mainTask.description && (
+                    <div className="p-4 bg-white">
+                        <details className="group">
+                            <summary className="cursor-pointer list-none flex items-center justify-between">
+                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                    Task Description
+                                </h3>
+                                <svg 
+                                    className="w-4 h-4 text-gray-400 group-open:rotate-90 transition-transform"
+                                    fill="none" 
+                                    stroke="currentColor" 
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                            </summary>
+                            
+                            <div className="mt-3 text-sm text-gray-700 space-y-2">
+                                <div className="prose prose-sm max-w-none">
+                                    {mainTask.description.split('\n').map((line, idx) => (
+                                        <p key={idx} className="mb-2">
+                                            {line}
+                                        </p>
+                                    ))}
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+                )}
+
+                {/* Section 4: Recent Activity */}
+                <CommentsSection mainTask={mainTask} />
+            </div>
+        );
+    }
+
+    // Main App Component
+    function WaitApprovalApp() {
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState(null);
+        const [taskData, setTaskData] = useState(null);
+        const [processLibraryRoot, setProcessLibraryRoot] = useState(null);
+        const [mainTask, setMainTask] = useState(null);
+        const [subtasks, setSubtasks] = useState([]);
+        const [expandedContext, setExpandedContext] = useState(false);
+        const [selectedStepId, setSelectedStepId] = useState(null);
+
+        useEffect(() => {
+            initializeApp();
+        }, []);
+
+        async function initializeApp() {
+            try {
+                setLoading(true);
+                setError(null);
+
+                // Check authentication first
+                if (!api.checkAuthentication()) {
+                    console.log('User not authenticated, redirecting to login...');
+                    return; // checkAuthentication() will redirect
+                }
+
+                // Get task ID from URL or use default
+                const params = getUrlParams();
+                const taskId = params.task_id;
+
+                console.log('Starting with task:', taskId);
+
+                // Fetch all data in a single backend call
+                const data = await api.initializeWaitNode(taskId);
+                
+                if (!data.root_task) {
+                    throw new Error('Could not find Process Library root task');
+                }
+
+                // Set all the state from the backend response
+                setProcessLibraryRoot(data.root_task);
+                setTaskData(data.wait_task);
+                setMainTask(data.main_task);
+                setSubtasks(data.subtasks || []);
+
+                console.log(`Loaded ${data.subtasks?.length || 0} subtasks`);
+
+            } catch (err) {
+                console.error('Initialization error:', err);
+                setError(`Failed to load approval data: ${err.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        if (loading) {
+            return (
+                <div className="min-h-screen flex items-center justify-center">
+                    <div className="text-center">
+                        <div className="spinner mx-auto mb-4"></div>
+                        <p className="text-gray-600">Loading approval interface...</p>
+                    </div>
+                </div>
+            );
+        }
+
+        if (error) {
+            return (
+                <div className="min-h-screen flex items-center justify-center">
+                    <div className="max-w-md p-6 bg-red-50 border border-red-200 rounded-lg">
+                        <h2 className="text-xl font-semibold text-red-800 mb-2">Error</h2>
+                        <p className="text-red-700">{error}</p>
+                        <button
+                            onClick={initializeApp}
+                            className="mt-4 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        const processText = getCustomField(taskData, FIELD_IDS.PROCESS_TEXT);
+
+        return (
+            <div className="min-h-screen bg-gray-100">
+                <div className="flex h-screen">
+                    {/* Left Panel - Main Task Context */}
+                    <div className="w-80 flex-shrink-0">
+                        <MainTaskPanel mainTask={mainTask} />
+                    </div>
+                    
+                    {/* Main Content Area */}
+                    <div className="flex-1 overflow-y-auto">
+                        <div className="bg-white shadow-lg">
+                            {/* Header */}
+                            <div className="bg-white border-b border-gray-200 p-6">
+                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                                    {getCustomField(taskData, FIELD_IDS.WAIT_CONFIG) ? 'Wait Node Approval' : 'Process Library Viewer'}
+                                </h3>
+                                <h1 className="text-2xl font-bold text-gray-900">{taskData.name}</h1>
+                                {taskData.custom_id && (
+                                    <p className="text-sm text-gray-500 mt-1">
+                                        {getCustomField(taskData, FIELD_IDS.WAIT_CONFIG) ? 'Wait Node: ' : 'Task: '}
+                                        <span className="font-mono text-gray-700">{taskData.custom_id}</span>
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Process Library Root Info - Expandable Context */}
+                            {processLibraryRoot && (
+                                <div className="bg-gray-50 border-b border-gray-200">
+                                    <div
+                                        onClick={() => setExpandedContext(!expandedContext)}
+                                        className="p-4 cursor-pointer hover:bg-gray-100 transition-colors"
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                                Process Context
+                                            </h3>
+                                            <span className={`text-gray-400 transition-transform duration-200 ${
+                                                expandedContext ? 'rotate-180' : ''
+                                            }`}>
+                                                ▼
+                                            </span>
+                                        </div>
+                                        <div className="text-sm text-gray-700 mt-3">
+                                            <div className="mb-2">
+                                                <span className="text-gray-500">Acting on: </span>
+                                                <a
+                                                    href={`https://app.clickup.com/t/${processLibraryRoot.id}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="text-blue-600 hover:text-blue-800 transition-colors"
+                                                >
+                                                    {processLibraryRoot.name}
+                                                </a>
+                                            </div>
+                                            <div>
+                                                <span className="text-gray-500">Task: </span>
+                                                <span className="font-mono text-xs text-gray-600">
+                                                    {processLibraryRoot.custom_id || processLibraryRoot.id}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Expanded Context Content */}
+                                    <div className={`accordion-content ${expandedContext ? 'show' : ''}`}>
+                                        {expandedContext && processLibraryRoot.description && (
+                                            <div className="bg-white border-t border-gray-200 p-4">
+                                                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                                                    Task Description
+                                                </h4>
+                                                <div
+                                                    className="markdown-content text-sm text-gray-700 max-h-80 overflow-y-auto pr-4"
+                                                    dangerouslySetInnerHTML={{
+                                                        __html: renderMarkdown(processLibraryRoot.description || 'No description available')
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
+                                        {expandedContext && !processLibraryRoot.description && (
+                                            <div className="bg-white border-t border-gray-200 p-4">
+                                                <p className="text-sm text-gray-500 italic">
+                                                    No task description available
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Process Context */}
+                            {processText && (
+                                <div className="bg-white border-b border-gray-200 p-6">
+                                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                                        📋 Process Context
+                                    </h3>
+                                    <div className="bg-gray-50 p-4 rounded-lg font-mono text-sm text-gray-700 whitespace-pre-wrap">
+                                        {processText}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Process Steps Accordion */}
+                            <ProcessStepsAccordion subtasks={subtasks} />
+
+                            {/* Approval Module - Only show for wait nodes */}
+                            {taskData && getCustomField(taskData, FIELD_IDS.WAIT_CONFIG) ? (
+                                <ApprovalModule
+                                    taskData={taskData}
+                                    onSuccess={() => {
+                                        // Optional: refresh the page or show a success message
+                                        console.log('Approval submitted successfully');
+                                    }}
+                                />
+                            ) : (
+                                <div className="p-6 bg-gray-50 border-b border-gray-200">
+                                    <div className="text-center">
+                                        <p className="text-gray-600">This is not a wait node task. Viewing process steps only.</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Summary Stats */}
+                            <div className="p-6 bg-gray-50 border-b border-gray-200">
+                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Summary</h3>
+                                <div className="grid grid-cols-3 gap-4 text-center">
+                                    <div>
+                                        <div className="text-2xl font-bold text-gray-900">{subtasks.length}</div>
+                                        <div className="text-sm text-gray-600">Total Steps</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-2xl font-bold text-green-600">
+                                            {subtasks.filter(s => getCustomField(s, FIELD_IDS.EXECUTED)).length}
+                                        </div>
+                                        <div className="text-sm text-gray-600">Executed</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-2xl font-bold text-gray-400">
+                                            {subtasks.filter(s => !getCustomField(s, FIELD_IDS.EXECUTED)).length}
+                                        </div>
+                                        <div className="text-sm text-gray-600">Pending</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right Panel - Step Details */}
+                    <StepDetailsPanel 
+                        subtasks={subtasks}
+                        selectedStepId={selectedStepId}
+                        onStepSelect={setSelectedStepId}
+                    />
+                </div>
+            </div>
+        );
+    }
+
+    // Render the app
+    ReactDOM.render(<WaitApprovalApp />, document.getElementById('root'));
+
+{% endraw %}
+</script>
+</body>
+</html>

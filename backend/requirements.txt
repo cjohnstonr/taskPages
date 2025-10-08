@@ -1,0 +1,27 @@
+# Core Flask dependencies
+Flask==3.0.0
+flask-cors==4.0.0
+Flask-Session==0.6.0  # Updated for Python 3.13 compatibility
+python-dotenv==1.0.0
+requests==2.31.0
+gunicorn==21.2.0
+
+# Authentication & Security
+google-auth==2.23.4
+google-auth-oauthlib==1.1.0
+google-auth-httplib2==0.1.1
+cryptography==41.0.7
+
+# Redis for session management
+redis==5.0.1
+hiredis==2.2.3  # C parser for better Redis performance
+
+# Security dependencies
+PyJWT==2.8.0
+werkzeug==3.0.1
+
+# Utilities
+python-dateutil==2.8.2
+
+# AI Integration
+openai==0.28.1
