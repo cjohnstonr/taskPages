@@ -1711,6 +1711,24 @@ def serve_escalation_v2():
     return render_template('secured/escalation-v2.html')
 
 
+@app.route('/pages/escalation-v3')
+@login_required
+@rate_limiter.rate_limit(limit='100 per hour')
+def serve_escalation_v3():
+    """
+    Serve escalation-v3 page (Phase 4: Supervisor Multi-Action UI)
+    Five-state system with 3-button supervisor panel:
+    - Answer (resolve)
+    - Request Info (ask employee for details)
+    - Escalate to Level 2 (send to Christian)
+    """
+    # Log page access for security audit
+    logger.info(f"Secure page access: escalation-v3 by {request.user.get('email')}")
+
+    # Render the template - query parameters are automatically available in the template
+    return render_template('secured/escalationv3.html')
+
+
 @app.route('/pages/wait-node-editable')
 @login_required
 @rate_limiter.rate_limit(limit='100 per hour')
