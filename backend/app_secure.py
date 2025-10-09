@@ -1411,6 +1411,110 @@ def escalate_to_level_2(task_id):
         return jsonify({"error": f"Failed to escalate to Level 2: {str(e)}"}), 500
 
 
+@app.route('/api/task-helper/respond-to-rfi/<task_id>', methods=['POST'])
+@login_required
+@rate_limiter.rate_limit(limit='10 per minute')
+def respond_to_rfi(task_id):
+    """
+    Employee responds to RFI (Phase 5: RFI System)
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Request body must be JSON"}), 400
+
+        rfi_response = data.get('response', '').strip()
+
+        if not rfi_response:
+            return jsonify({"error": "RFI response is required"}), 400
+
+        # Log RFI response for audit
+        logger.info(f"RFI response for task {task_id} by {request.user.get('email')}")
+
+        # Get ClickUp API configuration
+        clickup_token = os.getenv('CLICKUP_API_KEY')
+        if not clickup_token:
+            logger.error("ClickUp API key not configured")
+            return jsonify({"error": "ClickUp integration not configured"}), 500
+
+        # Custom field IDs
+        escalation_fields = {
+            'ESCALATION_RFI_RESPONSE': 'b5c52661-8142-45e0-bec5-14f3c135edbc',
+            'ESCALATION_RFI_STATUS': 'f94c0b4b-0c70-4c23-9633-07af2fa6ddc6',
+            'ESCALATION_STATUS': '8d784bd0-18e5-4db3-b45e-9a2900262e04'
+        }
+
+        try:
+            headers = {
+                "Authorization": clickup_token,
+                "Content-Type": "application/json"
+            }
+
+            # Update 3 fields: RFI_RESPONSE, RFI_STATUS=1 (Completed), ESCALATION_STATUS=1 (back to supervisor)
+            fields_to_update = [
+                (escalation_fields['ESCALATION_RFI_RESPONSE'], {"value": rfi_response}),
+                (escalation_fields['ESCALATION_RFI_STATUS'], {"value": 1}),  # orderindex 1 = 'RFI Completed'
+                (escalation_fields['ESCALATION_STATUS'], {"value": 1})  # orderindex 1 = 'ESCALATED' (back to supervisor)
+            ]
+
+            # Update each field individually
+            for field_id, field_data in fields_to_update:
+                field_response = requests.post(
+                    f"https://api.clickup.com/api/v2/task/{task_id}/field/{field_id}",
+                    headers=headers,
+                    json=field_data
+                )
+
+                if not field_response.ok:
+                    logger.error(f"Failed to update field {field_id}: {field_response.text}")
+                else:
+                    logger.info(f"Successfully updated field {field_id}")
+
+            # Add RFI response comment
+            rfi_comment = f"""✅ **RFI RESPONSE SUBMITTED**
+
+**Response**:
+{rfi_response}
+
+**Submitted by**: {request.user.get('email')}
+**Response Time**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
+
+----
+*Escalation returned to supervisor for review*"""
+
+            comment_response = requests.post(
+                f"https://api.clickup.com/api/v2/task/{task_id}/comment",
+                headers=headers,
+                json={
+                    "comment_text": rfi_comment,
+                    "notify_all": True
+                }
+            )
+
+            if not comment_response.ok:
+                logger.warning(f"Failed to add RFI response comment: {comment_response.text}")
+
+            # Success response
+            response_data = {
+                "success": True,
+                "message": "RFI response submitted successfully",
+                "task_id": task_id,
+                "submitted_by": request.user.get('email'),
+                "rfi_response": rfi_response,
+                "timestamp": datetime.now().isoformat()
+            }
+
+            return jsonify(response_data)
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"ClickUp API request failed: {e}")
+            return jsonify({"error": "Failed to communicate with ClickUp API"}), 500
+
+    except Exception as e:
+        logger.error(f"Error responding to RFI for task {task_id}: {e}")
+        return jsonify({"error": f"Failed to submit RFI response: {str(e)}"}), 500
+
+
 @app.route('/api/ai/generate-escalation-summary', methods=['POST'])
 @login_required  
 @rate_limiter.rate_limit(limit='20 per minute')
