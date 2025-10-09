@@ -644,34 +644,14 @@ def delete_task(task_id):
 def initialize_task_helper(task_id):
     """
     Initialize task helper with task data and hierarchy
-    Reuses wait-node logic but can be customized for task-helper specific needs
+    Uses ClickUpService to properly fetch task with custom fields
     """
     try:
-        # Get ClickUp API configuration
-        clickup_token = os.getenv('CLICKUP_API_KEY')
-        if not clickup_token:
-            logger.error("ClickUp API key not configured")
-            return jsonify({"error": "ClickUp integration not configured"}), 500
+        logger.info(f"Initializing task-helper for task: {task_id} by user: {request.user.get('email')}")
 
-        # Fetch the main task with custom fields
-        task_response = requests.get(
-            f"https://api.clickup.com/api/v2/task/{task_id}",
-            headers={"Authorization": clickup_token},
-            params={
-                "include_subtasks": "true",
-                "custom_task_ids": "true",
-                "include_markdown_description": "true"
-            }
-        )
-        
-        if task_response.status_code == 404:
-            return jsonify({"error": "Task not found"}), 404
-        elif not task_response.ok:
-            logger.error(f"ClickUp API error fetching task: {task_response.status_code}")
-            return jsonify({"error": "Failed to fetch task from ClickUp"}), 500
-        
-        main_task = task_response.json()
-        
+        # Fetch the main task with custom fields using the service
+        main_task = clickup_service.get_task(task_id, custom_task_ids=True, include_subtasks=True)
+
         # Initialize response structure
         response_data = {
             "main_task": main_task,
@@ -683,39 +663,201 @@ def initialize_task_helper(task_id):
                 "is_subtask": False
             }
         }
-        
+
         # Check if this task has a parent
         if main_task.get('parent'):
             parent_id = main_task['parent']
-            parent_response = requests.get(
-                f"https://api.clickup.com/api/v2/task/{parent_id}",
-                headers={"Authorization": clickup_token}
-            )
-            
-            if parent_response.ok:
-                response_data["parent_task"] = parent_response.json()
+            try:
+                parent_task = clickup_service.get_task(parent_id, custom_task_ids=True)
+                response_data["parent_task"] = parent_task
                 response_data["hierarchy"]["has_parent"] = True
                 response_data["hierarchy"]["parent_id"] = parent_id
                 response_data["hierarchy"]["is_subtask"] = True
-        
-        # Get subtasks if any
+            except Exception as e:
+                logger.warning(f"Could not fetch parent task {parent_id}: {e}")
+
+        # Get subtasks if any (already included with include_subtasks=True, but get full details)
         if main_task.get('subtasks'):
             subtask_ids = [st['id'] for st in main_task['subtasks']]
             for subtask_id in subtask_ids[:10]:  # Limit to 10 for performance
-                subtask_response = requests.get(
-                    f"https://api.clickup.com/api/v2/task/{subtask_id}",
-                    headers={"Authorization": clickup_token}
-                )
-                if subtask_response.ok:
-                    response_data["subtasks"].append(subtask_response.json())
-        
+                try:
+                    subtask = clickup_service.get_task(subtask_id, custom_task_ids=True)
+                    response_data["subtasks"].append(subtask)
+                except Exception as e:
+                    logger.warning(f"Could not fetch subtask {subtask_id}: {e}")
+
+        logger.info(f"Successfully initialized task-helper for {task_id} with {len(response_data['subtasks'])} subtasks")
         return jsonify(response_data)
-        
-    except requests.exceptions.RequestException as e:
-        logger.error(f"ClickUp API request failed: {e}")
-        return jsonify({"error": "Failed to communicate with ClickUp API"}), 500
+
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            return jsonify({"error": "Task not found"}), 404
+        logger.error(f"ClickUp API error: {e}")
+        return jsonify({"error": "Failed to fetch task from ClickUp"}), 500
     except Exception as e:
         logger.error(f"Error initializing task helper for task {task_id}: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+# ============================================================================
+# PROPERTY LINK VALIDATION HELPERS (Phase 2)
+# ============================================================================
+
+def is_custom_task_id(task_id: str) -> bool:
+    """
+    Detect if task_id is a custom ID format (e.g., TICKET-43999).
+
+    Args:
+        task_id: Task ID to check
+
+    Returns:
+        True if custom ID format, False if regular ID
+    """
+    return 'TICKET' in task_id.upper() or '-' in task_id or task_id[0].isupper()
+
+
+def get_custom_field_value(task: Dict[str, Any], field_id: str) -> Optional[Any]:
+    """
+    Extract custom field value from task.
+
+    Args:
+        task: Task data dict
+        field_id: Custom field ID to search for
+
+    Returns:
+        Field value or None if not found/empty
+    """
+    custom_fields = task.get('custom_fields', [])
+    for field in custom_fields:
+        if field['id'] == field_id:
+            value = field.get('value')
+            if value is None or value == [] or value == '':
+                return None
+            return value
+    return None
+
+
+def get_parent_task_id(task: Dict[str, Any]) -> Optional[str]:
+    """
+    Extract parent task ID from task structure.
+
+    Args:
+        task: Task data dict
+
+    Returns:
+        Parent task ID or None if no parent
+    """
+    parent_id = task.get('parent')
+    if not parent_id:
+        parent_id = task.get('top_level_parent')
+    return parent_id
+
+
+def ensure_property_link(task_id: str, clickup_token: str, team_id: str = '9011954126') -> Optional[List[str]]:
+    """
+    Ensure task has property_link, propagate from parent if missing.
+
+    Args:
+        task_id: Task ID (can be custom like TICKET-43999 or regular)
+        clickup_token: ClickUp API token
+        team_id: ClickUp team/workspace ID
+
+    Returns:
+        List of property link task IDs, or None if not found
+    """
+    PROPERTY_LINK_FIELD_ID = '73999194-0433-433d-a27c-4d9c5f194fd0'
+    BASE_URL = 'https://api.clickup.com/api/v2'
+    headers = {'Authorization': clickup_token, 'Content-Type': 'application/json'}
+
+    # Step 1: Get task
+    params = {'team_id': team_id}
+    if is_custom_task_id(task_id):
+        params['custom_task_ids'] = 'true'
+
+    response = requests.get(f'{BASE_URL}/task/{task_id}', headers=headers, params=params)
+    response.raise_for_status()
+    task = response.json()
+    task_regular_id = task['id']  # Always get regular ID for POST requests
+
+    # Step 2: Check if property_link exists
+    property_link = get_custom_field_value(task, PROPERTY_LINK_FIELD_ID)
+    if property_link:
+        # Extract just the IDs
+        return [p['id'] for p in property_link]
+
+    # Step 3: Get parent task
+    parent_id = get_parent_task_id(task)
+    if not parent_id:
+        return None
+
+    # Step 4: Get parent's property_link
+    parent_response = requests.get(
+        f'{BASE_URL}/task/{parent_id}',
+        headers=headers,
+        params={'team_id': team_id}
+    )
+    parent_response.raise_for_status()
+    parent_task = parent_response.json()
+
+    parent_property_link = get_custom_field_value(parent_task, PROPERTY_LINK_FIELD_ID)
+    if not parent_property_link:
+        return None
+
+    # Step 5: Extract IDs and set on subtask
+    property_link_ids = [p['id'] for p in parent_property_link]
+
+    # CRITICAL: Use regular task ID, not custom ID
+    # Payload format: {"value": {"add": [task_ids]}}
+    set_response = requests.post(
+        f'{BASE_URL}/task/{task_regular_id}/field/{PROPERTY_LINK_FIELD_ID}',
+        headers=headers,
+        json={'value': {'add': property_link_ids}}
+    )
+    set_response.raise_for_status()
+
+    logger.info(f"Propagated property_link from parent {parent_id} to subtask {task_id}: {property_link_ids}")
+    return property_link_ids
+
+
+@app.route('/api/task-helper/validate-property-link/<task_id>', methods=['GET'])
+@login_required
+@rate_limiter.rate_limit(limit='30 per minute')
+def validate_property_link(task_id):
+    """
+    Validate and ensure task has property_link (Phase 2).
+    Propagates from parent if missing.
+    """
+    try:
+        clickup_token = os.getenv('CLICKUP_API_KEY')
+        if not clickup_token:
+            logger.error("ClickUp API key not configured")
+            return jsonify({"error": "ClickUp integration not configured"}), 500
+
+        # Call ensure_property_link helper
+        property_link_ids = ensure_property_link(task_id, clickup_token)
+
+        if property_link_ids:
+            return jsonify({
+                "success": True,
+                "has_property_link": True,
+                "property_link_ids": property_link_ids,
+                "message": "Property link validated"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "has_property_link": False,
+                "property_link_ids": None,
+                "error": "No property link found on task or parent. This task must be linked to a property."
+            }), 400
+
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            return jsonify({"error": "Task not found"}), 404
+        logger.error(f"ClickUp API error validating property link: {e}")
+        return jsonify({"error": "Failed to validate property link"}), 500
+    except Exception as e:
+        logger.error(f"Error validating property link for task {task_id}: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 
@@ -747,16 +889,86 @@ def escalate_task(task_id):
             logger.error("ClickUp API key not configured")
             return jsonify({"error": "ClickUp integration not configured"}), 500
 
-        # Custom field IDs for escalation - ALL 7 FIELDS
+        # Custom field IDs for escalation - ALL EXIST IN CLICKUP
         escalation_fields = {
-            'ESCALATION_REASON': 'c6e0281e-9001-42d7-a265-8f5da6b71132',
-            'ESCALATION_AI_SUMMARY': 'e9e831f2-b439-4067-8e88-6b715f4263b2', 
+            'ESCALATION_REASON_TEXT': 'c6e0281e-9001-42d7-a265-8f5da6b71132',
+            'ESCALATION_REASON_AI': 'e9e831f2-b439-4067-8e88-6b715f4263b2',
+            'ESCALATION_AI_SUGGESTION': 'bc5e9359-01cd-408f-adb9-c7bdf1f2dd29',
             'ESCALATION_STATUS': '8d784bd0-18e5-4db3-b45e-9a2900262e04',
-            'ESCALATED_TO': '934811f1-239f-4d53-880c-3655571fd02e',
-            'ESCALATION_TIMESTAMP': '5ffd2b3e-b8dc-4bd0-819a-a3d4c3396a5f',
-            'SUPERVISOR_RESPONSE': 'a077ecc9-1a59-48af-b2cd-42a63f5a7f86',
-            'ESCALATION_RESOLVED_TIMESTAMP': 'c40bf1c4-7d33-4b2b-8765-0784cd88591a'
+            'ESCALATION_SUBMITTED_DATE_TIME': '5ffd2b3e-b8dc-4bd0-819a-a3d4c3396a5f',
+            'ESCALATION_RESPONSE_TEXT': 'a077ecc9-1a59-48af-b2cd-42a63f5a7f86',
+            'ESCALATION_RESOLVED_DATE_TIME': 'c40bf1c4-7d33-4b2b-8765-0784cd88591a',
+            'ESCALATION_AI_GRADE': '629ca244-a6d3-46dd-9f1e-6a0ded40f519',
+            'ESCALATION_HISTORY': '94790367-5d1f-4300-8f79-e13819f910d4',
+            'ESCALATION_LEVEL': '90d2fec8-7474-4221-84c0-b8c7fb5e4385',  # Dropdown: 0=Shirley, 1=Christian
+            'ESCALATION_RFI_STATUS': 'f94c0b4b-0c70-4c23-9633-07af2fa6ddc6',  # Dropdown: 0=RFI Requested, 1=RFI Completed
+            'ESCALATION_RFI_REQUEST': '0e7dd6f8-3167-4df5-964e-574734ffd4ed',
+            'ESCALATION_RFI_RESPONSE': 'b5c52661-8142-45e0-bec5-14f3c135edbc',
+            'PROPERTY_LINK': '73999194-0433-433d-a27c-4d9c5f194fd0'  # Task Relationship field
         }
+
+        # PHASE 3: Ensure property_link exists BEFORE everything else
+        logger.info(f"Phase 3: Validating property link for task {task_id}")
+        property_link_ids = ensure_property_link(task_id, clickup_token)
+
+        if not property_link_ids:
+            logger.error(f"No property link found for task {task_id}")
+            return jsonify({
+                'success': False,
+                'error': 'No property link found. This task must be linked to a property before escalation.'
+            }), 400
+
+        logger.info(f"Property link validated: {property_link_ids}")
+
+        # PHASE 3: Fetch task to check for cached AI suggestion
+        params = {}
+        if is_custom_task_id(task_id):
+            params = {
+                'custom_task_ids': 'true',
+                'team_id': '9011954126'
+            }
+
+        task_response = requests.get(
+            f"https://api.clickup.com/api/v2/task/{task_id}",
+            headers={"Authorization": clickup_token},
+            params=params
+        )
+
+        if not task_response.ok:
+            logger.error(f"Failed to fetch task {task_id}: {task_response.text}")
+            return jsonify({"error": "Failed to fetch task from ClickUp"}), 500
+
+        task = task_response.json()
+
+        # PHASE 3: Check for cached AI suggestion
+        existing_suggestion = get_custom_field_value(task, escalation_fields['ESCALATION_AI_SUGGESTION'])
+
+        if existing_suggestion:
+            # Use cached AI suggestion
+            ai_suggestion = existing_suggestion
+            logger.info(f"Using cached AI suggestion for task {task_id}")
+        else:
+            # PHASE 3: Call n8n to generate new AI suggestion
+            n8n_url = 'https://n8n.oodahost.ai/webhook/d176be54-1622-4b73-a5ce-e02d619a53b9'
+            logger.info(f"Calling n8n to generate AI suggestion for task {task_id}")
+
+            try:
+                n8n_response = requests.post(
+                    n8n_url,
+                    json={'task_id': task_id},
+                    timeout=30  # 30 second timeout for n8n
+                )
+
+                if n8n_response.ok:
+                    n8n_data = n8n_response.json()
+                    ai_suggestion = n8n_data.get('suggestion', '')
+                    logger.info(f"Generated new AI suggestion for task {task_id}")
+                else:
+                    logger.error(f"n8n webhook failed: {n8n_response.text}")
+                    ai_suggestion = "AI suggestion unavailable (n8n error)"
+            except requests.exceptions.RequestException as n8n_error:
+                logger.error(f"Error calling n8n webhook: {n8n_error}")
+                ai_suggestion = "AI suggestion unavailable (network error)"
 
         # Get escalated_to from request (supervisor selection)
         escalated_to = data.get('escalated_to', '')  # User ID or email
@@ -770,18 +982,19 @@ def escalate_task(task_id):
             
             # Set each field individually using the correct API endpoint
             fields_to_update = [
-                (escalation_fields['ESCALATION_REASON'], {"value": escalation_reason}),
-                (escalation_fields['ESCALATION_AI_SUMMARY'], {"value": ai_summary}),
+                (escalation_fields['ESCALATION_REASON_TEXT'], {"value": escalation_reason}),
+                (escalation_fields['ESCALATION_REASON_AI'], {"value": ai_summary}),
                 (escalation_fields['ESCALATION_STATUS'], {"value": 1}),  # orderindex 1 = 'Escalated'
-                (escalation_fields['ESCALATION_TIMESTAMP'], {
+                (escalation_fields['ESCALATION_SUBMITTED_DATE_TIME'], {
                     "value": int(datetime.now().timestamp() * 1000),
                     "value_options": {"time": True}  # Include time for date field
-                })
+                }),
+                (escalation_fields['ESCALATION_AI_SUGGESTION'], {"value": ai_suggestion})  # PHASE 3: AI suggestion
             ]
-            
-            # Add escalated_to if provided
+
+            # Add escalated_to level if provided (0=Shirley, 1=Christian)
             if escalated_to:
-                fields_to_update.append((escalation_fields['ESCALATED_TO'], {"value": escalated_to}))
+                fields_to_update.append((escalation_fields['ESCALATION_LEVEL'], {"value": escalated_to}))
             
             # Update each field individually
             for field_id, field_data in fields_to_update:
@@ -853,6 +1066,8 @@ def escalate_task(task_id):
                 "escalation_data": {
                     "reason": escalation_reason,
                     "ai_summary": ai_summary,
+                    "ai_suggestion": ai_suggestion,  # PHASE 3: Return AI suggestion to frontend
+                    "property_link_ids": property_link_ids,  # PHASE 3: Return validated property links
                     "context": task_context,
                     "timestamp": datetime.now().isoformat()
                 },
@@ -986,6 +1201,214 @@ def supervisor_response(task_id):
     except Exception as e:
         logger.error(f"Error recording supervisor response for task {task_id}: {e}")
         return jsonify({"error": f"Failed to record supervisor response: {str(e)}"}), 500
+
+
+@app.route('/api/task-helper/request-info/<task_id>', methods=['POST'])
+@login_required
+@rate_limiter.rate_limit(limit='10 per minute')
+def request_info(task_id):
+    """
+    Request information from employee (Phase 4: Supervisor Multi-Action UI)
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Request body must be JSON"}), 400
+
+        rfi_question = data.get('question', '').strip()
+
+        if not rfi_question:
+            return jsonify({"error": "RFI question is required"}), 400
+
+        # Log RFI request for audit
+        logger.info(f"RFI requested for task {task_id} by {request.user.get('email')}")
+
+        # Get ClickUp API configuration
+        clickup_token = os.getenv('CLICKUP_API_KEY')
+        if not clickup_token:
+            logger.error("ClickUp API key not configured")
+            return jsonify({"error": "ClickUp integration not configured"}), 500
+
+        # Custom field IDs
+        escalation_fields = {
+            'ESCALATION_RFI_REQUEST': '0e7dd6f8-3167-4df5-964e-574734ffd4ed',
+            'ESCALATION_RFI_STATUS': 'f94c0b4b-0c70-4c23-9633-07af2fa6ddc6',
+            'ESCALATION_STATUS': '8d784bd0-18e5-4db3-b45e-9a2900262e04'
+        }
+
+        try:
+            headers = {
+                "Authorization": clickup_token,
+                "Content-Type": "application/json"
+            }
+
+            # Update fields: RFI_REQUEST, RFI_STATUS=0 (RFI Requested), ESCALATION_STATUS=4 (AWAITING_INFO)
+            fields_to_update = [
+                (escalation_fields['ESCALATION_RFI_REQUEST'], {"value": rfi_question}),
+                (escalation_fields['ESCALATION_RFI_STATUS'], {"value": 0}),  # orderindex 0 = 'RFI Requested'
+                (escalation_fields['ESCALATION_STATUS'], {"value": 4})  # orderindex 4 = 'AWAITING_INFO'
+            ]
+
+            # Update each field individually
+            for field_id, field_data in fields_to_update:
+                field_response = requests.post(
+                    f"https://api.clickup.com/api/v2/task/{task_id}/field/{field_id}",
+                    headers=headers,
+                    json=field_data
+                )
+
+                if not field_response.ok:
+                    logger.error(f"Failed to update field {field_id}: {field_response.text}")
+                else:
+                    logger.info(f"Successfully updated field {field_id}")
+
+            # Add RFI comment to task
+            rfi_comment = f"""❓ **INFORMATION REQUESTED**
+
+**Question**:
+{rfi_question}
+
+**Requested by**: {request.user.get('email')}
+**Request Time**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
+
+----
+*Please respond with the requested information*"""
+
+            comment_response = requests.post(
+                f"https://api.clickup.com/api/v2/task/{task_id}/comment",
+                headers=headers,
+                json={
+                    "comment_text": rfi_comment,
+                    "notify_all": True
+                }
+            )
+
+            if not comment_response.ok:
+                logger.warning(f"Failed to add RFI comment: {comment_response.text}")
+
+            # Success response
+            response_data = {
+                "success": True,
+                "message": "Information request sent to employee",
+                "task_id": task_id,
+                "requested_by": request.user.get('email'),
+                "rfi_question": rfi_question,
+                "timestamp": datetime.now().isoformat()
+            }
+
+            return jsonify(response_data)
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"ClickUp API request failed: {e}")
+            return jsonify({"error": "Failed to communicate with ClickUp API"}), 500
+
+    except Exception as e:
+        logger.error(f"Error requesting info for task {task_id}: {e}")
+        return jsonify({"error": f"Failed to request information: {str(e)}"}), 500
+
+
+@app.route('/api/task-helper/escalate-to-level-2/<task_id>', methods=['POST'])
+@login_required
+@rate_limiter.rate_limit(limit='10 per minute')
+def escalate_to_level_2(task_id):
+    """
+    Escalate task to Level 2 (Christian) (Phase 4: Supervisor Multi-Action UI)
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Request body must be JSON"}), 400
+
+        additional_context = data.get('context', '').strip()
+
+        # Log escalation for audit
+        logger.info(f"Level 2 escalation for task {task_id} by {request.user.get('email')}")
+
+        # Get ClickUp API configuration
+        clickup_token = os.getenv('CLICKUP_API_KEY')
+        if not clickup_token:
+            logger.error("ClickUp API key not configured")
+            return jsonify({"error": "ClickUp integration not configured"}), 500
+
+        # Custom field IDs
+        escalation_fields = {
+            'ESCALATION_LEVEL': '90d2fec8-7474-4221-84c0-b8c7fb5e4385',
+            'ESCALATION_STATUS': '8d784bd0-18e5-4db3-b45e-9a2900262e04'
+        }
+
+        try:
+            headers = {
+                "Authorization": clickup_token,
+                "Content-Type": "application/json"
+            }
+
+            # Update fields: ESCALATION_LEVEL=1 (Christian), ESCALATION_STATUS=3 (ESCALATED_LEVEL_2)
+            fields_to_update = [
+                (escalation_fields['ESCALATION_LEVEL'], {"value": 1}),  # orderindex 1 = 'Christian'
+                (escalation_fields['ESCALATION_STATUS'], {"value": 3})  # orderindex 3 = 'ESCALATED_LEVEL_2'
+            ]
+
+            # Update each field individually
+            for field_id, field_data in fields_to_update:
+                field_response = requests.post(
+                    f"https://api.clickup.com/api/v2/task/{task_id}/field/{field_id}",
+                    headers=headers,
+                    json=field_data
+                )
+
+                if not field_response.ok:
+                    logger.error(f"Failed to update field {field_id}: {field_response.text}")
+                else:
+                    logger.info(f"Successfully updated field {field_id}")
+
+            # Build escalation comment
+            l2_comment = f"""⬆️ **ESCALATED TO LEVEL 2 (CHRISTIAN)**
+
+**Escalated by**: {request.user.get('email')}
+**Escalation Time**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}"""
+
+            if additional_context:
+                l2_comment += f"""
+
+**Additional Context**:
+{additional_context}"""
+
+            l2_comment += """
+
+----
+*This escalation requires executive review*"""
+
+            comment_response = requests.post(
+                f"https://api.clickup.com/api/v2/task/{task_id}/comment",
+                headers=headers,
+                json={
+                    "comment_text": l2_comment,
+                    "notify_all": True
+                }
+            )
+
+            if not comment_response.ok:
+                logger.warning(f"Failed to add Level 2 escalation comment: {comment_response.text}")
+
+            # Success response
+            response_data = {
+                "success": True,
+                "message": "Task escalated to Level 2 (Christian)",
+                "task_id": task_id,
+                "escalated_by": request.user.get('email'),
+                "additional_context": additional_context,
+                "timestamp": datetime.now().isoformat()
+            }
+
+            return jsonify(response_data)
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"ClickUp API request failed: {e}")
+            return jsonify({"error": "Failed to communicate with ClickUp API"}), 500
+
+    except Exception as e:
+        logger.error(f"Error escalating to Level 2 for task {task_id}: {e}")
+        return jsonify({"error": f"Failed to escalate to Level 2: {str(e)}"}), 500
 
 
 @app.route('/api/ai/generate-escalation-summary', methods=['POST'])

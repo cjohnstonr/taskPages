@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase 3 Console Logging Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-left: 4px solid #2196F3;
+            margin: 20px 0;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1976D2;
+        }
+        .console-box {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            margin: 20px 0;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 3px 0;
+        }
+        .log-info { color: #4FC3F7; }
+        .log-success { color: #81C784; }
+        .log-error { color: #E57373; }
+        .log-warn { color: #FFB74D; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Phase 3 Console Logging Test</h1>
+        <p>This page simulates the console logging flow from escalationv3.html</p>
+
+        <div class="info">
+            <strong>📋 Test Purpose:</strong> Verify console logging for property link validation and n8n AI suggestion integration
+        </div>
+
+        <div class="test-section">
+            <h3>Test Scenario 1: Successful Escalation with AI Suggestion</h3>
+            <p>Simulates: Property link validation → n8n call → AI suggestion received</p>
+            <button onclick="testSuccessFlow()">▶️ Run Success Flow</button>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Scenario 2: Property Link Missing (Blocked)</h3>
+            <p>Simulates: Property link validation fails → Escalation blocked</p>
+            <button onclick="testPropertyLinkMissing()">▶️ Run Property Link Error</button>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Scenario 3: n8n Error (Graceful Fallback)</h3>
+            <p>Simulates: Property link OK → n8n fails → Escalation succeeds without AI suggestion</p>
+            <button onclick="testN8nError()">▶️ Run n8n Error Flow</button>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Scenario 4: Cached AI Suggestion</h3>
+            <p>Simulates: Property link OK → AI suggestion already exists → Uses cached value</p>
+            <button onclick="testCachedSuggestion()">▶️ Run Cached Flow</button>
+        </div>
+
+        <h3 style="margin-top: 40px;">📺 Console Output:</h3>
+        <div id="consoleBox" class="console-box">
+            <div class="log-entry log-info">Console logging initialized. Click a test button above...</div>
+        </div>
+
+        <button onclick="clearConsole()" style="background: #757575;">🗑️ Clear Console</button>
+        <button onclick="copyConsole()" style="background: #4CAF50;">📋 Copy to Clipboard</button>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'http://localhost:5000';
+        const consoleBox = document.getElementById('consoleBox');
+        const logs = [];
+
+        // Mock task object
+        const task = {
+            id: 'TICKET-43999',
+            name: 'Test Task for Phase 3 Integration'
+        };
+
+        // Enhanced console logging that displays in the page
+        function log(message, type = 'info') {
+            const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+            const logClass = `log-${type}`;
+            const entry = `[${timestamp}] ${message}`;
+
+            logs.push(entry);
+            console.log(message);  // Also log to real console
+
+            const logDiv = document.createElement('div');
+            logDiv.className = `log-entry ${logClass}`;
+            logDiv.textContent = entry;
+            consoleBox.appendChild(logDiv);
+            consoleBox.scrollTop = consoleBox.scrollHeight;
+        }
+
+        function clearConsole() {
+            consoleBox.innerHTML = '<div class="log-entry log-info">Console cleared.</div>';
+            logs.length = 0;
+        }
+
+        function copyConsole() {
+            const text = logs.join('\n');
+            navigator.clipboard.writeText(text).then(() => {
+                log('✅ Console output copied to clipboard', 'success');
+            });
+        }
+
+        // Simulate the validatePropertyLink function
+        async function validatePropertyLink(shouldFail = false) {
+            log('🔍 PHASE 2: Starting property link validation for task: ' + task.id, 'info');
+            const endpoint = `${BACKEND_URL}/api/task-helper/validate-property-link/${task.id}`;
+            log('   📡 Calling endpoint: ' + endpoint, 'info');
+
+            // Simulate API delay
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            if (shouldFail) {
+                log('   📥 Response status: 400', 'error');
+                log('   📥 Response data: {success: false, error: "No property link found"}', 'error');
+                log('   ❌ Property link validation failed: No property link found', 'error');
+                return { valid: false, error: 'No property link found' };
+            } else {
+                log('   📥 Response status: 200', 'success');
+                log('   📥 Response data: {success: true, property_link_ids: ["868ckm4qz"]}', 'success');
+                log('   ✅ Property link validated successfully!', 'success');
+                log('   📍 Property link IDs: ["868ckm4qz"]', 'success');
+                return { valid: true, property_link_ids: ['868ckm4qz'] };
+            }
+        }
+
+        // Test Scenario 1: Success Flow
+        async function testSuccessFlow() {
+            clearConsole();
+            log('🚀 ESCALATION FLOW STARTED', 'info');
+            log('   Task ID: ' + task.id, 'info');
+            log('   Task Name: ' + task.name, 'info');
+
+            // Phase 2: Validate property link
+            log('📋 PHASE 2: Validating property link...', 'info');
+            const propertyValidation = await validatePropertyLink(false);
+
+            if (!propertyValidation.valid) {
+                log('❌ BLOCKED: Property link validation failed', 'error');
+                return;
+            }
+
+            log('✅ PHASE 2 COMPLETE: Property link validated, proceeding with escalation...', 'success');
+            log('🚀 PHASE 3: Starting escalation submission with n8n AI integration', 'info');
+
+            // Simulate escalation API call
+            await new Promise(resolve => setTimeout(resolve, 800));
+            log('   📥 Escalation response status: 200', 'success');
+            log('   📥 Escalation response data: {success: true, escalation_data: {...}}', 'success');
+
+            const aiSuggestion = "Based on the task context and property SOPs, I suggest checking the maintenance schedule for this property. The issue appears related to the scheduled preventive maintenance that was due last week. Recommend escalating to the property manager for immediate attention.";
+            log('   🤖 AI Suggestion: ' + aiSuggestion, 'success');
+            log('   ✅ PHASE 3 COMPLETE: AI suggestion received from n8n', 'success');
+            log('   🔄 Reloading page in 1.5 seconds...', 'info');
+
+            setTimeout(() => {
+                alert('✅ Escalation submitted successfully!\n\n🤖 AI Suggestion:\n' + aiSuggestion);
+            }, 100);
+        }
+
+        // Test Scenario 2: Property Link Missing
+        async function testPropertyLinkMissing() {
+            clearConsole();
+            log('🚀 ESCALATION FLOW STARTED', 'info');
+            log('   Task ID: ' + task.id, 'info');
+            log('   Task Name: ' + task.name, 'info');
+
+            log('📋 PHASE 2: Validating property link...', 'info');
+            const propertyValidation = await validatePropertyLink(true);
+
+            if (!propertyValidation.valid) {
+                log('❌ BLOCKED: Property link validation failed: ' + propertyValidation.error, 'error');
+                alert('❌ Property Link Missing\n\nNo property link found. This task must be linked to a property before escalating.');
+                return;
+            }
+        }
+
+        // Test Scenario 3: n8n Error
+        async function testN8nError() {
+            clearConsole();
+            log('🚀 ESCALATION FLOW STARTED', 'info');
+            log('   Task ID: ' + task.id, 'info');
+            log('   Task Name: ' + task.name, 'info');
+
+            log('📋 PHASE 2: Validating property link...', 'info');
+            const propertyValidation = await validatePropertyLink(false);
+
+            log('✅ PHASE 2 COMPLETE: Property link validated, proceeding with escalation...', 'success');
+            log('🚀 PHASE 3: Starting escalation submission with n8n AI integration', 'info');
+
+            await new Promise(resolve => setTimeout(resolve, 800));
+            log('   📥 Escalation response status: 200', 'success');
+            log('   📥 Escalation response data: {success: true, escalation_data: {...}}', 'success');
+
+            const aiSuggestion = "AI suggestion unavailable (network error)";
+            log('   🤖 AI Suggestion: ' + aiSuggestion, 'warn');
+            log('   ⚠️ PHASE 3: n8n error, escalation succeeded but no AI suggestion', 'warn');
+            log('   🔄 Reloading page in 1.5 seconds...', 'info');
+
+            setTimeout(() => {
+                alert('✅ Escalation submitted successfully!\n\n⚠️ ' + aiSuggestion);
+            }, 100);
+        }
+
+        // Test Scenario 4: Cached Suggestion
+        async function testCachedSuggestion() {
+            clearConsole();
+            log('🚀 ESCALATION FLOW STARTED', 'info');
+            log('   Task ID: ' + task.id, 'info');
+            log('   Task Name: ' + task.name, 'info');
+
+            log('📋 PHASE 2: Validating property link...', 'info');
+            const propertyValidation = await validatePropertyLink(false);
+
+            log('✅ PHASE 2 COMPLETE: Property link validated, proceeding with escalation...', 'success');
+            log('🚀 PHASE 3: Starting escalation submission with n8n AI integration', 'info');
+            log('   📋 Checking for cached AI suggestion...', 'info');
+
+            await new Promise(resolve => setTimeout(resolve, 300));
+            log('   ✅ Found cached AI suggestion - skipping n8n call', 'success');
+            log('   📥 Escalation response status: 200', 'success');
+            log('   📥 Escalation response data: {success: true, escalation_data: {...}}', 'success');
+
+            const cachedSuggestion = "Review the tenant complaint history and property maintenance records. Similar issues were resolved by scheduling immediate HVAC inspection. Contact: John (Maintenance) ext. 234";
+            log('   🤖 AI Suggestion (cached): ' + cachedSuggestion, 'success');
+            log('   ✅ PHASE 3 COMPLETE: Using cached AI suggestion (no n8n call needed)', 'success');
+            log('   🔄 Reloading page in 1.5 seconds...', 'info');
+
+            setTimeout(() => {
+                alert('✅ Escalation submitted successfully!\n\n🤖 AI Suggestion:\n' + cachedSuggestion);
+            }, 100);
+        }
+    </script>
+</body>
+</html>
