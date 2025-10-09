@@ -213,7 +213,15 @@
         ESCALATION_RFI_RESPONSE: 'b5c52661-8142-45e0-bec5-14f3c135edbc',
 
         // TODO: Still need PROPERTY_LINK field - check if exists in ClickUp
-        PROPERTY_LINK: 'TODO_FIND_IN_CLICKUP' // Task relationship field - links to property for context
+        PROPERTY_LINK: 'TODO_FIND_IN_CLICKUP', // Task relationship field - links to property for context
+
+        // Compatibility aliases for cleaner code
+        ESCALATION_REASON: 'c6e0281e-9001-42d7-a265-8f5da6b71132', // Alias for ESCALATION_REASON_TEXT
+        ESCALATION_AI_SUMMARY: 'e9e831f2-b439-4067-8e88-6b715f4263b2', // Alias for ESCALATION_REASON_AI
+        SUPERVISOR_RESPONSE: 'a077ecc9-1a59-48af-b2cd-42a63f5a7f86', // Alias for ESCALATION_RESPONSE_TEXT
+        ESCALATED_TO: '90d2fec8-7474-4221-84c0-b8c7fb5e4385', // Alias for ESCALATION_LEVEL
+        ESCALATION_TIMESTAMP: '5ffd2b3e-b8dc-4bd0-819a-a3d4c3396a5f', // Alias for ESCALATION_SUBMITTED_DATE_TIME
+        ESCALATION_RESOLVED_TIMESTAMP: 'c40bf1c4-7d33-4b2b-8765-0784cd88591a' // Alias for ESCALATION_RESOLVED_DATE_TIME
     };
 
     // Helper function to extract URL parameters
@@ -794,7 +802,8 @@
 
         // Get escalation field values
         const reason = getCustomField(task, FIELD_IDS.ESCALATION_REASON);
-        const summary = getCustomField(task, FIELD_IDS.ESCALATION_AI_SUMMARY);
+        const aiSummary = getCustomField(task, FIELD_IDS.ESCALATION_AI_SUMMARY); // AI-generated situation summary
+        const aiSuggestion = getCustomField(task, FIELD_IDS.ESCALATION_AI_SUGGESTION); // AI-generated action recommendation
         const status = getCustomField(task, FIELD_IDS.ESCALATION_STATUS);
         const supervisorResponse = getCustomField(task, FIELD_IDS.SUPERVISOR_RESPONSE);
         const escalatedTo = getCustomField(task, FIELD_IDS.ESCALATED_TO);
@@ -803,7 +812,7 @@
 
         // Determine escalation state using proper UUID mapping
         const escalationStatus = getEscalationStatus(task);
-        const isEscalated = escalationStatus === 'ESCALATED' || reason || summary;
+        const isEscalated = escalationStatus === 'ESCALATED' || reason || aiSummary;
         const isResolved = escalationStatus === 'RESOLVED' || supervisorResponse;
         const isAwaitingResponse = isEscalated && !isResolved;
 
@@ -811,7 +820,8 @@
         console.log('🚨 [ESCALATION MODULE] State Detection:', {
             escalationStatus,
             reason,
-            summary,
+            aiSummary,
+            aiSuggestion,
             supervisorResponse,
             isEscalated,
             isResolved,
@@ -1072,15 +1082,22 @@
                     <div className="space-y-4">
                         {reason && (
                             <div className="bg-white p-4 rounded">
-                                <h4 className="text-sm font-semibold text-gray-700 mb-1">Original Reason:</h4>
+                                <h4 className="text-sm font-semibold text-gray-700 mb-1">📝 Original Reason:</h4>
                                 <p className="text-sm text-gray-800">{reason}</p>
                             </div>
                         )}
 
-                        {summary && (
+                        {aiSummary && (
                             <div className="bg-blue-50 p-4 rounded">
-                                <h4 className="text-sm font-semibold text-blue-700 mb-1">AI Suggestion:</h4>
-                                <p className="text-sm text-gray-800">{summary}</p>
+                                <h4 className="text-sm font-semibold text-blue-700 mb-1">🤖 AI Summary:</h4>
+                                <p className="text-sm text-gray-800">{aiSummary}</p>
+                            </div>
+                        )}
+
+                        {aiSuggestion && (
+                            <div className="bg-green-50 p-4 rounded">
+                                <h4 className="text-sm font-semibold text-green-700 mb-1">💡 AI Suggestion:</h4>
+                                <p className="text-sm text-gray-800">{aiSuggestion}</p>
                             </div>
                         )}
 
