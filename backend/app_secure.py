@@ -853,12 +853,165 @@ def validate_property_link(task_id):
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 
+@app.route('/api/task-helper/generate-ai/<task_id>', methods=['POST'])
+@login_required
+@rate_limiter.rate_limit(limit='10 per minute')
+def generate_ai_analysis(task_id):
+    """
+    Generate or retrieve AI analysis fields (summary + suggestion)
+    WRITES to ClickUp immediately if fields don't exist
+    Does NOT change escalation status - only generates AI fields
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Request body must be JSON"}), 400
+
+        escalation_reason = data.get('reason', '').strip()
+
+        if not escalation_reason:
+            return jsonify({"error": "Escalation reason is required for AI analysis"}), 400
+
+        # Log AI generation attempt
+        logger.info(f"AI analysis requested for task {task_id} by {request.user.get('email')}")
+
+        # Get ClickUp API configuration
+        clickup_token = os.getenv('CLICKUP_API_KEY')
+        if not clickup_token:
+            logger.error("ClickUp API key not configured")
+            return jsonify({"error": "ClickUp integration not configured"}), 500
+
+        # Field IDs for AI analysis
+        FIELD_AI_SUMMARY = 'e9e831f2-b439-4067-8e88-6b715f4263b2'  # ESCALATION_REASON_AI
+        FIELD_AI_SUGGESTION = 'bc5e9359-01cd-408f-adb9-c7bdf1f2dd29'  # ESCALATION_AI_SUGGESTION
+
+        # Fetch task to check for existing AI fields
+        params = {}
+        if is_custom_task_id(task_id):
+            params = {
+                'custom_task_ids': 'true',
+                'team_id': '9011954126'
+            }
+
+        task_response = requests.get(
+            f"https://api.clickup.com/api/v2/task/{task_id}",
+            headers={"Authorization": clickup_token},
+            params=params
+        )
+
+        if not task_response.ok:
+            logger.error(f"Failed to fetch task {task_id}: {task_response.text}")
+            return jsonify({"error": "Failed to fetch task from ClickUp"}), 500
+
+        task = task_response.json()
+
+        # Check if BOTH AI fields already exist (cached)
+        existing_summary = get_custom_field_value(task, FIELD_AI_SUMMARY)
+        existing_suggestion = get_custom_field_value(task, FIELD_AI_SUGGESTION)
+
+        # If BOTH exist, return cached values (no n8n call)
+        if existing_summary and existing_suggestion:
+            logger.info(f"Using cached AI fields for task {task_id}")
+            return jsonify({
+                'success': True,
+                'ai_summary': existing_summary,
+                'ai_suggestion': existing_suggestion,
+                'cached': True
+            })
+
+        # Call n8n to generate BOTH AI fields
+        n8n_url = 'https://n8n.oodahost.ai/webhook/d176be54-1622-4b73-a5ce-e02d619a53b9'
+        logger.info(f"Calling n8n to generate AI analysis for task {task_id}")
+
+        try:
+            n8n_response = requests.post(
+                n8n_url,
+                json={'task_id': task_id},
+                timeout=30  # 30 second timeout
+            )
+
+            if n8n_response.ok:
+                n8n_data = n8n_response.json()
+                ai_summary = n8n_data.get('summary', '')
+                ai_suggestion = n8n_data.get('suggestion', '')
+
+                if not ai_summary or not ai_suggestion:
+                    logger.error(f"n8n returned incomplete data: summary={bool(ai_summary)}, suggestion={bool(ai_suggestion)}")
+                    return jsonify({
+                        'success': False,
+                        'error': 'n8n returned incomplete AI analysis'
+                    }), 500
+
+                # WRITE both fields to ClickUp IMMEDIATELY
+                headers = {
+                    "Authorization": clickup_token,
+                    "Content-Type": "application/json"
+                }
+
+                fields_to_update = [
+                    (FIELD_AI_SUMMARY, {"value": ai_summary}),
+                    (FIELD_AI_SUGGESTION, {"value": ai_suggestion})
+                ]
+
+                for field_id, field_data in fields_to_update:
+                    field_response = requests.post(
+                        f"https://api.clickup.com/api/v2/task/{task_id}/field/{field_id}",
+                        headers=headers,
+                        json=field_data
+                    )
+
+                    if not field_response.ok:
+                        logger.error(f"Failed to write AI field {field_id} to ClickUp: {field_response.text}")
+                        return jsonify({
+                            'success': False,
+                            'error': f'Failed to save AI analysis to ClickUp'
+                        }), 500
+                    else:
+                        logger.info(f"Successfully wrote AI field {field_id} to ClickUp")
+
+                logger.info(f"AI fields written to ClickUp for task {task_id}")
+
+                return jsonify({
+                    'success': True,
+                    'ai_summary': ai_summary,
+                    'ai_suggestion': ai_suggestion,
+                    'cached': False
+                })
+
+            else:
+                logger.error(f"n8n webhook failed: {n8n_response.status_code} - {n8n_response.text}")
+                return jsonify({
+                    'success': False,
+                    'error': f'n8n error: {n8n_response.status_code}'
+                }), 500
+
+        except requests.exceptions.Timeout:
+            logger.error(f"n8n webhook timed out after 30 seconds for task {task_id}")
+            return jsonify({
+                'success': False,
+                'error': 'n8n timeout after 30 seconds. Please try again.'
+            }), 500
+
+        except requests.exceptions.RequestException as n8n_error:
+            logger.error(f"Error calling n8n webhook: {n8n_error}")
+            return jsonify({
+                'success': False,
+                'error': f'Network error calling n8n: {str(n8n_error)}'
+            }), 500
+
+    except Exception as e:
+        logger.error(f"Error generating AI analysis for task {task_id}: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
 @app.route('/api/task-helper/escalate/<task_id>', methods=['POST'])
 @login_required
 @rate_limiter.rate_limit(limit='10 per minute')
 def escalate_task(task_id):
     """
-    Escalate a task - adds escalation custom fields and creates notification
+    Escalate a task - changes status to ESCALATED
+    Expects AI fields to already exist in ClickUp (set via /api/task-helper/generate-ai/<task_id>)
+    Adds escalation reason, timestamp, and creates notification
     """
     try:
         data = request.get_json()
@@ -932,42 +1085,21 @@ def escalate_task(task_id):
 
         task = task_response.json()
 
-        # PHASE 3: Check for cached AI fields (BOTH summary and suggestion)
-        existing_summary = get_custom_field_value(task, escalation_fields['ESCALATION_REASON_AI'])
-        existing_suggestion = get_custom_field_value(task, escalation_fields['ESCALATION_AI_SUGGESTION'])
+        # PHASE 4: Read AI fields from ClickUp (should already exist from generate-ai endpoint)
+        # These fields are written by /api/task-helper/generate-ai/<task_id> before escalation
+        ai_summary = get_custom_field_value(task, escalation_fields['ESCALATION_REASON_AI'])
+        ai_suggestion = get_custom_field_value(task, escalation_fields['ESCALATION_AI_SUGGESTION'])
 
-        # Only call n8n if EITHER field is missing
-        if existing_summary and existing_suggestion:
-            # Use cached values
-            ai_summary = existing_summary
-            ai_suggestion = existing_suggestion
-            logger.info(f"Using cached AI summary and suggestion for task {task_id}")
-        else:
-            # PHASE 3: Call n8n to generate BOTH AI summary and suggestion
-            n8n_url = 'https://n8n.oodahost.ai/webhook/d176be54-1622-4b73-a5ce-e02d619a53b9'
-            logger.info(f"Calling n8n to generate AI summary and suggestion for task {task_id}")
+        # Use fallback text if AI fields don't exist (they should exist in normal flow)
+        if not ai_summary:
+            ai_summary = "AI summary not generated - please use 'Generate AI Analysis' button first"
+            logger.warning(f"AI summary missing for task {task_id} during escalation")
 
-            try:
-                n8n_response = requests.post(
-                    n8n_url,
-                    json={'task_id': task_id},
-                    timeout=30  # 30 second timeout for n8n
-                )
+        if not ai_suggestion:
+            ai_suggestion = "AI suggestion not generated - please use 'Generate AI Analysis' button first"
+            logger.warning(f"AI suggestion missing for task {task_id} during escalation")
 
-                if n8n_response.ok:
-                    n8n_data = n8n_response.json()
-                    ai_summary = n8n_data.get('summary', '')        # AI Summary for employee
-                    ai_suggestion = n8n_data.get('suggestion', '')  # AI Suggestion for supervisor
-                    logger.info(f"Generated new AI summary and suggestion for task {task_id}")
-                    logger.info(f"AI Summary length: {len(ai_summary)}, AI Suggestion length: {len(ai_suggestion)}")
-                else:
-                    logger.error(f"n8n webhook failed: {n8n_response.text}")
-                    ai_summary = "AI summary unavailable (n8n error)"
-                    ai_suggestion = "AI suggestion unavailable (n8n error)"
-            except requests.exceptions.RequestException as n8n_error:
-                logger.error(f"Error calling n8n webhook: {n8n_error}")
-                ai_summary = "AI summary unavailable (network error)"
-                ai_suggestion = "AI suggestion unavailable (network error)"
+        logger.info(f"Read AI fields from ClickUp for task {task_id}: summary={bool(ai_summary)}, suggestion={bool(ai_suggestion)}")
 
         # Get escalated_to from request (supervisor selection)
         escalated_to = data.get('escalated_to', '')  # User ID or email
@@ -980,15 +1112,16 @@ def escalate_task(task_id):
             }
             
             # Set each field individually using the correct API endpoint
+            # NOTE: AI fields should already exist from generate-ai endpoint, but we re-write them here for safety
             fields_to_update = [
                 (escalation_fields['ESCALATION_REASON_TEXT'], {"value": escalation_reason}),
-                (escalation_fields['ESCALATION_REASON_AI'], {"value": ai_summary}),
+                (escalation_fields['ESCALATION_REASON_AI'], {"value": ai_summary}),  # Should already exist
                 (escalation_fields['ESCALATION_STATUS'], {"value": 1}),  # orderindex 1 = 'Escalated'
                 (escalation_fields['ESCALATION_SUBMITTED_DATE_TIME'], {
                     "value": int(datetime.now().timestamp() * 1000),
                     "value_options": {"time": True}  # Include time for date field
                 }),
-                (escalation_fields['ESCALATION_AI_SUGGESTION'], {"value": ai_suggestion})  # PHASE 3: AI suggestion
+                (escalation_fields['ESCALATION_AI_SUGGESTION'], {"value": ai_suggestion})  # Should already exist
             ]
 
             # Add escalated_to level if provided (0=Shirley, 1=Christian)
