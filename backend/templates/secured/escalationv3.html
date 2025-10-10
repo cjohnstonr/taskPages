@@ -552,7 +552,7 @@
     }
 
     // PHASE 4: Supervisor Action Panel - 3-button decision interface
-    function SupervisorActionPanel({ task, escalationReason, aiSuggestion, onRefresh }) {
+    function SupervisorActionPanel({ task, escalationReason, aiSummary, aiSuggestion, onRefresh }) {
         const [selectedAction, setSelectedAction] = useState(null);
         const [responseText, setResponseText] = useState('');
         const [rfiQuestion, setRfiQuestion] = useState('');
@@ -617,12 +617,18 @@
                         🚨 Escalation Awaiting Your Action
                     </h3>
                     <div className="bg-white p-4 rounded-md mb-2">
-                        <p className="text-sm font-semibold text-gray-600">Employee Reason:</p>
+                        <p className="text-sm font-semibold text-gray-600">📝 Employee Reason:</p>
                         <p className="text-gray-800">{escalationReason}</p>
                     </div>
+                    {aiSummary && (
+                        <div className="bg-blue-50 p-4 rounded-md mb-2">
+                            <p className="text-sm font-semibold text-blue-600">🤖 AI Summary:</p>
+                            <p className="text-gray-800">{aiSummary}</p>
+                        </div>
+                    )}
                     {aiSuggestion && (
-                        <div className="bg-blue-50 p-4 rounded-md">
-                            <p className="text-sm font-semibold text-blue-600">🤖 AI Suggestion:</p>
+                        <div className="bg-green-50 p-4 rounded-md">
+                            <p className="text-sm font-semibold text-green-600">💡 AI Suggestion:</p>
                             <p className="text-gray-800">{aiSuggestion}</p>
                         </div>
                     )}
@@ -1030,7 +1036,8 @@
                 <SupervisorActionPanel
                     task={task}
                     escalationReason={reason}
-                    aiSuggestion={summary}
+                    aiSummary={aiSummary}
+                    aiSuggestion={aiSuggestion}
                     onRefresh={onRefresh}
                 />
             );
