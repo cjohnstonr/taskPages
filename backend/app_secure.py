@@ -909,8 +909,11 @@ def generate_ai_analysis(task_id):
         existing_summary = get_custom_field_value(task, FIELD_AI_SUMMARY)
         existing_suggestion = get_custom_field_value(task, FIELD_AI_SUGGESTION)
 
-        # If BOTH exist, return cached values (no n8n call)
-        if existing_summary and existing_suggestion:
+        # Check if user wants to force regeneration (bypass cache)
+        force_regenerate = data.get('force_regenerate', False)
+
+        # If BOTH exist AND not forcing regeneration, return cached values (no n8n call)
+        if existing_summary and existing_suggestion and not force_regenerate:
             logger.info(f"Using cached AI fields for task {task_id}")
             return jsonify({
                 'success': True,
@@ -918,6 +921,10 @@ def generate_ai_analysis(task_id):
                 'ai_suggestion': existing_suggestion,
                 'cached': True
             })
+
+        # Log if regenerating
+        if force_regenerate:
+            logger.info(f"Force regenerating AI fields for task {task_id} (bypassing cache)")
 
         # Call n8n to generate BOTH AI fields
         n8n_url = 'https://n8n.oodahost.ai/webhook/d176be54-1622-4b73-a5ce-e02d619a53b9'

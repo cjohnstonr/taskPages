@@ -887,10 +887,11 @@
         };
 
         // Generate AI Analysis (Step 1 of two-step flow)
-        const generateAIAnalysis = async () => {
+        const generateAIAnalysis = async (forceRegenerate = false) => {
             console.log('🤖 AI GENERATION FLOW STARTED');
             console.log('   Task ID:', task.id);
             console.log('   Escalation Reason:', escalationText);
+            console.log('   Force Regenerate:', forceRegenerate);
 
             setAiGenerationState('generating');
             setGenerationError(null);
@@ -917,7 +918,8 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        reason: escalationText
+                        reason: escalationText,
+                        force_regenerate: forceRegenerate
                     })
                 });
 
@@ -1272,7 +1274,7 @@
                             {/* Regenerate Button (optional) */}
                             {!isSubmitting && (
                                 <button
-                                    onClick={generateAIAnalysis}
+                                    onClick={() => generateAIAnalysis(true)}
                                     className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm"
                                 >
                                     🔄 Regenerate AI Analysis
