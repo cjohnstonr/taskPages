@@ -1654,6 +1654,139 @@ def respond_to_rfi(task_id):
         return jsonify({"error": f"Failed to submit RFI response: {str(e)}"}), 500
 
 
+@app.route('/api/task-helper/christian-response/<task_id>', methods=['POST', 'OPTIONS'])
+@login_required
+@rate_limiter.rate_limit(limit='10 per minute')
+def christian_response(task_id):
+    """
+    Handle Christian's response to a Level 2 escalation
+
+    This endpoint:
+    1. Updates ESCALATION_STATUS from ESCALATED to RESOLVED (orderindex 1 → 2)
+    2. Writes Christian's response to ESCALATION_RESPONSE_TEXT
+    3. Updates ESCALATION_RESOLVED_TIMESTAMP
+    4. Adds a comment to the task
+
+    Request body:
+    {
+        "response": "Christian's response text"
+    }
+
+    Returns:
+    {
+        "success": true,
+        "message": "Level 2 escalation resolved successfully",
+        "task_id": "...",
+        "resolved_at": "..."
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Request body must be JSON"}), 400
+
+        christian_response_text = data.get('response', '').strip()
+
+        if not christian_response_text:
+            return jsonify({"error": "Christian's response is required"}), 400
+
+        # Log Christian's response for audit
+        logger.info(f"Christian (L2) response for task {task_id} by {request.user.get('email')}")
+
+        # Get ClickUp API configuration
+        clickup_token = os.getenv('CLICKUP_API_KEY')
+        if not clickup_token:
+            logger.error("ClickUp API key not configured")
+            return jsonify({"error": "ClickUp integration not configured"}), 500
+
+        # Custom field IDs
+        escalation_fields = {
+            'ESCALATION_STATUS': '8d784bd0-18e5-4db3-b45e-9a2900262e04',
+            'CHRISTIAN_RESPONSE': 'a077ecc9-1a59-48af-b2cd-42a63f5a7f86',  # ESCALATION_RESPONSE_TEXT
+            'ESCALATION_RESOLVED_TIMESTAMP': 'c40bf1c4-7d33-4b2b-8765-0784cd88591a'
+        }
+
+        try:
+            # Update task custom fields with Christian's response - ONE AT A TIME
+            headers = {
+                "Authorization": clickup_token,
+                "Content-Type": "application/json"
+            }
+
+            # Set each field individually using the correct API endpoint
+            resolved_timestamp = int(datetime.now().timestamp() * 1000)
+
+            fields_to_update = [
+                (escalation_fields['CHRISTIAN_RESPONSE'], {"value": christian_response_text}),
+                (escalation_fields['ESCALATION_STATUS'], {"value": 2}),  # orderindex 2 = 'Resolved'
+                (escalation_fields['ESCALATION_RESOLVED_TIMESTAMP'], {
+                    "value": resolved_timestamp,
+                    "value_options": {"time": True}  # Include time for date field
+                })
+            ]
+
+            # Update each field individually
+            for field_id, field_data in fields_to_update:
+                field_response = requests.post(
+                    f"https://api.clickup.com/api/v2/task/{task_id}/field/{field_id}",
+                    headers=headers,
+                    json=field_data
+                )
+
+                if not field_response.ok:
+                    logger.error(f"Failed to update field {field_id}: {field_response.text}")
+                    # Continue trying other fields even if one fails
+                else:
+                    logger.info(f"Successfully updated field {field_id}")
+
+            # All fields attempted, continue with the rest
+
+            # Add resolution comment to task
+            resolution_comment = f"""✅ **LEVEL 2 ESCALATION RESOLVED BY CHRISTIAN**
+
+**Response**:
+{christian_response_text}
+
+**Resolved by**: {request.user.get('email')}
+**Resolution Time**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
+
+----
+*This Level 2 resolution was recorded via Task Helper*"""
+
+            comment_response = requests.post(
+                f"https://api.clickup.com/api/v2/task/{task_id}/comment",
+                headers={
+                    "Authorization": clickup_token,
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "comment_text": resolution_comment,
+                    "notify_all": True
+                }
+            )
+
+            if not comment_response.ok:
+                logger.error(f"Failed to add resolution comment: {comment_response.text}")
+            else:
+                logger.info(f"Successfully added L2 resolution comment to task {task_id}")
+
+            return jsonify({
+                "success": True,
+                "message": "Level 2 escalation resolved successfully by Christian",
+                "task_id": task_id,
+                "resolved_at": datetime.now().isoformat(),
+                "resolved_timestamp": resolved_timestamp
+            })
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"ClickUp API error for task {task_id}: {e}")
+            return jsonify({"error": "Failed to communicate with ClickUp API"}), 500
+
+    except Exception as e:
+        logger.error(f"Error in Christian's L2 response for task {task_id}: {e}")
+        return jsonify({"error": f"Failed to submit L2 resolution: {str(e)}"}), 500
+
+
 # =====================================================
 # Secure Page Routes - Server-Side Rendering
 # =====================================================
