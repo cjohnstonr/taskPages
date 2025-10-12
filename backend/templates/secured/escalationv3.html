@@ -1272,12 +1272,7 @@
             }
         }, [aiSummary, aiSuggestion]);
 
-        // Load attachments on mount and when task changes
-        useEffect(() => {
-            loadAttachments();
-        }, [task.id]);
-
-        // Load attachments from backend
+        // Load attachments from backend - DEFINED BEFORE useEffect
         const loadAttachments = async () => {
             try {
                 setIsLoadingAttachments(true);
@@ -1303,6 +1298,11 @@
                 setIsLoadingAttachments(false);
             }
         };
+
+        // Load attachments on mount and when task changes
+        useEffect(() => {
+            loadAttachments();
+        }, [task.id]);
 
         // Determine escalation state using proper UUID mapping
         const escalationStatus = getEscalationStatus(task);
