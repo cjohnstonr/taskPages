@@ -551,6 +551,303 @@
         );
     }
 
+    // ATTACHMENT COMPONENTS: File type icon helper function
+    function getFileTypeIcon(mimeType) {
+        if (!mimeType) return '📄';
+
+        if (mimeType.startsWith('image/')) return '🖼️';
+        if (mimeType === 'application/pdf') return '📕';
+        if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return '📊';
+        if (mimeType.includes('word') || mimeType.includes('document')) return '📝';
+
+        return '📄';
+    }
+
+    // ATTACHMENT COMPONENTS: Full-screen image viewer with navigation
+    function FullScreenImageViewer({ attachment, allAttachments, onClose, onNavigate }) {
+        const currentIndex = allAttachments.findIndex(att => att.id === attachment.id);
+        const canGoPrevious = currentIndex > 0;
+        const canGoNext = currentIndex < allAttachments.length - 1;
+
+        const handlePrevious = () => {
+            if (canGoPrevious) {
+                onNavigate(allAttachments[currentIndex - 1]);
+            }
+        };
+
+        const handleNext = () => {
+            if (canGoNext) {
+                onNavigate(allAttachments[currentIndex + 1]);
+            }
+        };
+
+        // Close on escape key
+        useEffect(() => {
+            const handleEscape = (e) => {
+                if (e.key === 'Escape') onClose();
+            };
+            window.addEventListener('keydown', handleEscape);
+            return () => window.removeEventListener('keydown', handleEscape);
+        }, [onClose]);
+
+        return (
+            <div
+                className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center"
+                onClick={onClose}
+            >
+                {/* Close button */}
+                <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 text-white text-3xl hover:text-gray-300 z-10"
+                >
+                    ✕
+                </button>
+
+                {/* Previous button */}
+                {canGoPrevious && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); handlePrevious(); }}
+                        className="absolute left-4 text-white text-4xl hover:text-gray-300 z-10"
+                    >
+                        ‹
+                    </button>
+                )}
+
+                {/* Image */}
+                <div className="max-w-7xl max-h-screen p-8" onClick={(e) => e.stopPropagation()}>
+                    {attachment.type.startsWith('image/') ? (
+                        <img
+                            src={attachment.url}
+                            alt={attachment.title}
+                            className="max-w-full max-h-screen object-contain"
+                        />
+                    ) : (
+                        <div className="bg-white p-8 rounded-lg text-center">
+                            <div className="text-6xl mb-4">{getFileTypeIcon(attachment.type)}</div>
+                            <p className="text-xl font-semibold mb-2">{attachment.title}</p>
+                            <p className="text-gray-600 mb-4">{attachment.type}</p>
+                            <a
+                                href={attachment.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-block px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                            >
+                                Download File
+                            </a>
+                        </div>
+                    )}
+                    <p className="text-white text-center mt-4">{attachment.title}</p>
+                </div>
+
+                {/* Next button */}
+                {canGoNext && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); handleNext(); }}
+                        className="absolute right-4 text-white text-4xl hover:text-gray-300 z-10"
+                    >
+                        ›
+                    </button>
+                )}
+
+                {/* Counter */}
+                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white">
+                    {currentIndex + 1} / {allAttachments.length}
+                </div>
+            </div>
+        );
+    }
+
+    // ATTACHMENT COMPONENTS: Attachment gallery with upload
+    function AttachmentGallery({ taskId, attachments, onAttachmentsUpdate, allowUpload = true }) {
+        const [selectedAttachment, setSelectedAttachment] = useState(null);
+        const [isUploading, setIsUploading] = useState(false);
+        const [uploadProgress, setUploadProgress] = useState(0);
+        const fileInputRef = useRef(null);
+
+        // Upload attachment using XMLHttpRequest for progress tracking
+        const uploadAttachment = (file) => {
+            return new Promise((resolve, reject) => {
+                setIsUploading(true);
+                setUploadProgress(0);
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const xhr = new XMLHttpRequest();
+
+                // Track upload progress
+                xhr.upload.addEventListener('progress', (event) => {
+                    if (event.lengthComputable) {
+                        const percentComplete = Math.round((event.loaded / event.total) * 100);
+                        setUploadProgress(percentComplete);
+                    }
+                });
+
+                // Handle completion
+                xhr.addEventListener('load', () => {
+                    setIsUploading(false);
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        const response = JSON.parse(xhr.responseText);
+                        resolve(response);
+                    } else {
+                        const error = JSON.parse(xhr.responseText);
+                        reject(new Error(error.error || 'Upload failed'));
+                    }
+                });
+
+                // Handle errors
+                xhr.addEventListener('error', () => {
+                    setIsUploading(false);
+                    reject(new Error('Upload failed'));
+                });
+
+                // Send request
+                xhr.open('POST', `${BACKEND_URL}/api/task-helper/upload-attachment/${taskId}`);
+                xhr.withCredentials = true; // Include cookies for authentication
+                xhr.send(formData);
+            });
+        };
+
+        const handleFileSelect = async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Validate file size (10MB)
+            const maxSize = 10 * 1024 * 1024;
+            if (file.size > maxSize) {
+                alert('❌ File size exceeds 10MB limit');
+                return;
+            }
+
+            // Validate file type
+            const allowedTypes = [
+                'image/jpeg', 'image/jpg', 'image/png', 'image/gif',
+                'application/pdf',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            ];
+
+            if (!allowedTypes.includes(file.type)) {
+                alert('❌ File type not supported. Allowed: images, PDF, Excel, Word');
+                return;
+            }
+
+            try {
+                const response = await uploadAttachment(file);
+                if (response.success) {
+                    alert('✅ File uploaded successfully!');
+                    // Refresh attachments list
+                    if (onAttachmentsUpdate) {
+                        onAttachmentsUpdate();
+                    }
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert(`❌ Upload failed: ${error.message}`);
+            } finally {
+                // Reset file input
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = '';
+                }
+            }
+        };
+
+        const handleUploadClick = () => {
+            fileInputRef.current?.click();
+        };
+
+        const handleAttachmentClick = (attachment) => {
+            setSelectedAttachment(attachment);
+        };
+
+        return (
+            <div className="bg-gray-50 border border-gray-300 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-gray-700">
+                        📎 Attachments ({attachments?.length || 0})
+                    </h4>
+                    {allowUpload && (
+                        <button
+                            onClick={handleUploadClick}
+                            disabled={isUploading}
+                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isUploading ? `Uploading ${uploadProgress}%` : '+ Upload'}
+                        </button>
+                    )}
+                </div>
+
+                {/* Hidden file input */}
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileSelect}
+                    accept="image/*,.pdf,.xlsx,.xls,.docx,.doc"
+                />
+
+                {/* Upload progress bar */}
+                {isUploading && (
+                    <div className="mb-3">
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                                className="bg-blue-600 h-2 rounded-full transition-all"
+                                style={{ width: `${uploadProgress}%` }}
+                            ></div>
+                        </div>
+                        <p className="text-xs text-gray-600 mt-1 text-center">
+                            Uploading... {uploadProgress}%
+                        </p>
+                    </div>
+                )}
+
+                {/* Attachments grid */}
+                {attachments && attachments.length > 0 ? (
+                    <div className="grid grid-cols-3 gap-2">
+                        {attachments.map((attachment) => (
+                            <div
+                                key={attachment.id}
+                                onClick={() => handleAttachmentClick(attachment)}
+                                className="cursor-pointer border border-gray-300 rounded-md overflow-hidden hover:border-blue-500 transition-colors"
+                            >
+                                {attachment.type.startsWith('image/') ? (
+                                    <img
+                                        src={attachment.thumbnail_small || attachment.url}
+                                        alt={attachment.title}
+                                        className="w-full h-20 object-cover"
+                                    />
+                                ) : (
+                                    <div className="w-full h-20 bg-gray-200 flex items-center justify-center">
+                                        <span className="text-3xl">{getFileTypeIcon(attachment.type)}</span>
+                                    </div>
+                                )}
+                                <div className="p-1 bg-white">
+                                    <p className="text-xs text-gray-700 truncate">{attachment.title}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-sm text-gray-500 text-center py-4">
+                        No attachments yet
+                    </p>
+                )}
+
+                {/* Full-screen viewer */}
+                {selectedAttachment && (
+                    <FullScreenImageViewer
+                        attachment={selectedAttachment}
+                        allAttachments={attachments}
+                        onClose={() => setSelectedAttachment(null)}
+                        onNavigate={setSelectedAttachment}
+                    />
+                )}
+            </div>
+        );
+    }
+
     // PHASE 4: Supervisor Action Panel - 3-button decision interface
     function SupervisorActionPanel({ task, escalationReason, aiSummary, aiSuggestion, onRefresh }) {
         const [selectedAction, setSelectedAction] = useState(null);
@@ -951,6 +1248,10 @@
         const [generatedAiSummary, setGeneratedAiSummary] = useState('');
         const [generatedAiSuggestion, setGeneratedAiSuggestion] = useState('');
 
+        // Attachment state
+        const [attachments, setAttachments] = useState([]);
+        const [isLoadingAttachments, setIsLoadingAttachments] = useState(true);
+
         // Get escalation field values
         const reason = getCustomField(task, FIELD_IDS.ESCALATION_REASON);
         const aiSummary = getCustomField(task, FIELD_IDS.ESCALATION_AI_SUMMARY); // AI-generated situation summary
@@ -970,6 +1271,38 @@
                 setAiGenerationState('ready');
             }
         }, [aiSummary, aiSuggestion]);
+
+        // Load attachments on mount and when task changes
+        useEffect(() => {
+            loadAttachments();
+        }, [task.id]);
+
+        // Load attachments from backend
+        const loadAttachments = async () => {
+            try {
+                setIsLoadingAttachments(true);
+                const response = await fetch(
+                    `${BACKEND_URL}/api/task-helper/attachments/${task.id}`,
+                    {
+                        method: 'GET',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' }
+                    }
+                );
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setAttachments(data.attachments || []);
+                    console.log(`📎 Loaded ${data.count} attachments for task ${task.id}`);
+                } else {
+                    console.error('Failed to load attachments:', response.status);
+                }
+            } catch (error) {
+                console.error('Error loading attachments:', error);
+            } finally {
+                setIsLoadingAttachments(false);
+            }
+        };
 
         // Determine escalation state using proper UUID mapping
         const escalationStatus = getEscalationStatus(task);
@@ -1229,6 +1562,14 @@
                                 <p className="text-sm text-gray-700 bg-white p-3 rounded">{supervisorResponse}</p>
                             </div>
                         )}
+
+                        {/* Attachments - View only in resolved state */}
+                        <AttachmentGallery
+                            taskId={task.id}
+                            attachments={attachments}
+                            onAttachmentsUpdate={loadAttachments}
+                            allowUpload={false}
+                        />
                     </div>
                 </div>
             );
@@ -1239,13 +1580,23 @@
         // ESCALATED STATE (orderindex 1) - Show Supervisor Action Panel
         if (escalationStatus === 'ESCALATED') {
             return (
-                <SupervisorActionPanel
-                    task={task}
-                    escalationReason={reason}
-                    aiSummary={aiSummary}
-                    aiSuggestion={aiSuggestion}
-                    onRefresh={onRefresh}
-                />
+                <div className="space-y-4">
+                    <SupervisorActionPanel
+                        task={task}
+                        escalationReason={reason}
+                        aiSummary={aiSummary}
+                        aiSuggestion={aiSuggestion}
+                        onRefresh={onRefresh}
+                    />
+
+                    {/* Attachments - Allow uploads for supervisor to add documentation */}
+                    <AttachmentGallery
+                        taskId={task.id}
+                        attachments={attachments}
+                        onAttachmentsUpdate={loadAttachments}
+                        allowUpload={true}
+                    />
+                </div>
             );
         }
 
@@ -1273,6 +1624,14 @@
                         )}
 
                         <RFIResponseForm task={task} rfiRequest={rfiRequest} onRefresh={onRefresh} />
+
+                        {/* Attachments - Allow uploads for employee to provide supporting documents */}
+                        <AttachmentGallery
+                            taskId={task.id}
+                            attachments={attachments}
+                            onAttachmentsUpdate={loadAttachments}
+                            allowUpload={true}
+                        />
                     </div>
                 </div>
             );
@@ -1281,13 +1640,23 @@
         // ESCALATED_LEVEL_2 STATE (orderindex 3) - Christian's Action Panel
         if (escalationStatus === 'ESCALATED_LEVEL_2') {
             return (
-                <ChristianActionPanel
-                    task={task}
-                    escalationReason={reason}
-                    aiSummary={aiSummary}
-                    aiSuggestion={aiSuggestion}
-                    onRefresh={onRefresh}
-                />
+                <div className="space-y-4">
+                    <ChristianActionPanel
+                        task={task}
+                        escalationReason={reason}
+                        aiSummary={aiSummary}
+                        aiSuggestion={aiSuggestion}
+                        onRefresh={onRefresh}
+                    />
+
+                    {/* Attachments - Allow uploads for Christian to add documentation */}
+                    <AttachmentGallery
+                        taskId={task.id}
+                        attachments={attachments}
+                        onAttachmentsUpdate={loadAttachments}
+                        allowUpload={true}
+                    />
+                </div>
             );
         }
 
@@ -1393,6 +1762,14 @@
                             )}
                         </div>
                     )}
+
+                    {/* Attachments - Allow uploads when creating escalation */}
+                    <AttachmentGallery
+                        taskId={task.id}
+                        attachments={attachments}
+                        onAttachmentsUpdate={loadAttachments}
+                        allowUpload={true}
+                    />
                 </div>
             </div>
         );

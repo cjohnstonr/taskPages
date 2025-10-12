@@ -1787,6 +1787,241 @@ def christian_response(task_id):
         return jsonify({"error": f"Failed to submit L2 resolution: {str(e)}"}), 500
 
 
+@app.route('/api/task-helper/attachments/<task_id>', methods=['GET', 'OPTIONS'])
+@login_required
+@rate_limiter.rate_limit(limit='20 per minute')
+def get_task_attachments(task_id):
+    """
+    Fetch all attachments for a task
+
+    This endpoint retrieves all files attached to a ClickUp task,
+    including images, PDFs, and other document types.
+
+    Returns:
+    {
+        "success": true,
+        "attachments": [
+            {
+                "id": "attachment_id",
+                "title": "photo.jpg",
+                "url": "https://...",
+                "thumbnail_small": "https://...",
+                "thumbnail_medium": "https://...",
+                "date": 1234567890,
+                "type": "image/jpeg",
+                "size": 102400,
+                "user": {
+                    "id": 123,
+                    "username": "john.doe@example.com",
+                    "email": "john.doe@example.com"
+                }
+            }
+        ],
+        "count": 1
+    }
+    """
+    try:
+        # Log attachment fetch for audit
+        logger.info(f"Fetching attachments for task {task_id} by {request.user.get('email')}")
+
+        # Get ClickUp API configuration
+        clickup_token = os.getenv('CLICKUP_API_KEY')
+        if not clickup_token:
+            logger.error("ClickUp API key not configured")
+            return jsonify({"error": "ClickUp integration not configured"}), 500
+
+        try:
+            # Fetch attachments from ClickUp
+            headers = {
+                "Authorization": clickup_token,
+                "Content-Type": "application/json"
+            }
+
+            response = requests.get(
+                f"https://api.clickup.com/api/v2/task/{task_id}/attachment",
+                headers=headers
+            )
+
+            if not response.ok:
+                logger.error(f"Failed to fetch attachments: {response.status_code} - {response.text}")
+                return jsonify({
+                    "error": f"Failed to fetch attachments from ClickUp: {response.status_code}"
+                }), response.status_code
+
+            attachments_data = response.json()
+
+            # Process attachments to ensure consistent format
+            attachments = attachments_data.get('attachments', [])
+            processed_attachments = []
+
+            for att in attachments:
+                processed_att = {
+                    'id': att.get('id'),
+                    'title': att.get('title', att.get('name', 'Untitled')),
+                    'url': att.get('url'),
+                    'date': att.get('date'),
+                    'type': att.get('mimetype', att.get('type', 'application/octet-stream')),
+                    'size': att.get('size', 0),
+                    'user': {
+                        'id': att.get('user', {}).get('id'),
+                        'username': att.get('user', {}).get('username'),
+                        'email': att.get('user', {}).get('email')
+                    }
+                }
+
+                # Add thumbnail URLs if they exist (for images)
+                if 'thumbnail_small' in att:
+                    processed_att['thumbnail_small'] = att['thumbnail_small']
+                if 'thumbnail_medium' in att:
+                    processed_att['thumbnail_medium'] = att['thumbnail_medium']
+                if 'thumbnail_large' in att:
+                    processed_att['thumbnail_large'] = att['thumbnail_large']
+
+                processed_attachments.append(processed_att)
+
+            logger.info(f"Successfully fetched {len(processed_attachments)} attachments for task {task_id}")
+
+            return jsonify({
+                "success": True,
+                "attachments": processed_attachments,
+                "count": len(processed_attachments)
+            })
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"ClickUp API error for task {task_id}: {e}")
+            return jsonify({"error": "Failed to communicate with ClickUp API"}), 500
+
+    except Exception as e:
+        logger.error(f"Error fetching attachments for task {task_id}: {e}")
+        return jsonify({"error": f"Failed to fetch attachments: {str(e)}"}), 500
+
+
+@app.route('/api/task-helper/upload-attachment/<task_id>', methods=['POST', 'OPTIONS'])
+@login_required
+@rate_limiter.rate_limit(limit='10 per minute')
+def upload_task_attachment(task_id):
+    """
+    Upload an attachment to a task
+
+    This endpoint accepts a file upload and attaches it to a ClickUp task.
+
+    Request: multipart/form-data with 'file' field
+
+    File Requirements:
+    - Max size: 10MB
+    - Allowed types: images (jpg, png, gif), PDF, Excel, Word documents
+
+    Returns:
+    {
+        "success": true,
+        "attachment": {
+            "id": "attachment_id",
+            "title": "document.pdf",
+            "url": "https://...",
+            "date": 1234567890,
+            "type": "application/pdf",
+            "size": 102400
+        }
+    }
+    """
+    try:
+        # Log upload attempt for audit
+        logger.info(f"Upload attachment for task {task_id} by {request.user.get('email')}")
+
+        # Check if file is present in request
+        if 'file' not in request.files:
+            return jsonify({"error": "No file provided"}), 400
+
+        file = request.files['file']
+
+        # Check if filename is empty
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+
+        # Validate file size (10MB limit)
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)  # Reset file pointer
+
+        max_size = 10 * 1024 * 1024  # 10MB
+        if file_size > max_size:
+            return jsonify({
+                "error": f"File size ({file_size} bytes) exceeds maximum allowed size (10MB)"
+            }), 400
+
+        # Validate file type
+        allowed_types = {
+            'image/jpeg', 'image/jpg', 'image/png', 'image/gif',
+            'application/pdf',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        }
+
+        # Get mimetype from file
+        file_type = file.content_type
+        if file_type not in allowed_types:
+            return jsonify({
+                "error": f"File type '{file_type}' not supported. Allowed: images, PDF, Excel, Word"
+            }), 400
+
+        # Get ClickUp API configuration
+        clickup_token = os.getenv('CLICKUP_API_KEY')
+        if not clickup_token:
+            logger.error("ClickUp API key not configured")
+            return jsonify({"error": "ClickUp integration not configured"}), 500
+
+        try:
+            # Upload to ClickUp
+            headers = {
+                "Authorization": clickup_token
+            }
+
+            # ClickUp expects the file in 'attachment' field
+            files = {
+                'attachment': (file.filename, file.stream, file.content_type)
+            }
+
+            response = requests.post(
+                f"https://api.clickup.com/api/v2/task/{task_id}/attachment",
+                headers=headers,
+                files=files
+            )
+
+            if not response.ok:
+                logger.error(f"Failed to upload attachment: {response.status_code} - {response.text}")
+                return jsonify({
+                    "error": f"Failed to upload to ClickUp: {response.status_code}"
+                }), response.status_code
+
+            attachment_data = response.json()
+
+            logger.info(f"Successfully uploaded attachment '{file.filename}' to task {task_id}")
+
+            # Return attachment details
+            return jsonify({
+                "success": True,
+                "attachment": {
+                    "id": attachment_data.get('id'),
+                    "title": attachment_data.get('title', file.filename),
+                    "url": attachment_data.get('url'),
+                    "date": attachment_data.get('date'),
+                    "type": file_type,
+                    "size": file_size
+                },
+                "message": "File uploaded successfully"
+            })
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"ClickUp API error for task {task_id}: {e}")
+            return jsonify({"error": "Failed to communicate with ClickUp API"}), 500
+
+    except Exception as e:
+        logger.error(f"Error uploading attachment for task {task_id}: {e}")
+        return jsonify({"error": f"Failed to upload attachment: {str(e)}"}), 500
+
+
 # =====================================================
 # Secure Page Routes - Server-Side Rendering
 # =====================================================
