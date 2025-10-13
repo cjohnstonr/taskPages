@@ -952,7 +952,7 @@ def generate_ai_analysis(task_id):
             n8n_response = requests.post(
                 n8n_url,
                 json={'task_id': task_id},
-                timeout=30  # 30 second timeout
+                timeout=120  # 120 second timeout
             )
 
             if n8n_response.ok:
@@ -1011,10 +1011,10 @@ def generate_ai_analysis(task_id):
                 }), 500
 
         except requests.exceptions.Timeout:
-            logger.error(f"n8n webhook timed out after 30 seconds for task {task_id}")
+            logger.error(f"n8n webhook timed out after 120 seconds for task {task_id}")
             return jsonify({
                 'success': False,
-                'error': 'n8n timeout after 30 seconds. Please try again.'
+                'error': 'n8n timeout after 120 seconds. Please try again.'
             }), 500
 
         except requests.exceptions.RequestException as n8n_error:
