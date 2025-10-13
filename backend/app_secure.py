@@ -18,23 +18,27 @@ import requests
 from typing import Dict, Any, Optional, List
 from concurrent.futures import ThreadPoolExecutor
 
+# Load environment variables FIRST (before any imports that read from os.environ)
+load_dotenv()
+
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent))
 
-# Import security modules
-from config.security import SecureConfig
-from auth.oauth_handler import auth_bp, init_redis, login_required
-from auth.security_middleware import SecurityMiddleware, RateLimiter
-
-# Configure logging FIRST (before using logger)
+# Configure logging (before using logger)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-load_dotenv()
+# Import security modules (AFTER load_dotenv so config reads correct env vars)
+from config.security import SecureConfig
+from auth.oauth_handler import auth_bp, init_redis, login_required
+from auth.security_middleware import SecurityMiddleware, RateLimiter
+
+# Import portal modules
+from portal import PortalRegistry
+from portal.apps.kpi_dashboard import KPIDashboardApp
 
 # Note: OpenAI removed - using n8n for AI analysis instead
 
@@ -82,6 +86,20 @@ CORS(app,
 
 # Register authentication blueprint
 app.register_blueprint(auth_bp)
+
+# =====================================================
+# Portal Setup - Modular App Framework
+# =====================================================
+
+# Initialize portal registry
+portal_registry = PortalRegistry()
+
+# Register portal apps
+kpi_dashboard_app = KPIDashboardApp()
+portal_registry.register(kpi_dashboard_app)
+app.register_blueprint(kpi_dashboard_app.get_blueprint())
+
+logger.info(f"Portal initialized with {portal_registry.get_app_count()} apps")
 
 # ClickUp API Configuration
 CLICKUP_API_KEY = os.getenv('CLICKUP_API_KEY')
@@ -1792,7 +1810,10 @@ def christian_response(task_id):
 @rate_limiter.rate_limit(limit='20 per minute')
 def get_task_attachments(task_id):
     """
-    Fetch all attachments for a task
+    Fetch all attachments for a task by retrieving the full task object
+
+    Note: ClickUp API v2 does not have a dedicated attachment endpoint.
+    We fetch the full task object and extract the attachments array.
 
     This endpoint retrieves all files attached to a ClickUp task,
     including images, PDFs, and other document types.
@@ -1831,27 +1852,27 @@ def get_task_attachments(task_id):
             return jsonify({"error": "ClickUp integration not configured"}), 500
 
         try:
-            # Fetch attachments from ClickUp
+            # Fetch task object from ClickUp (contains attachments array)
             headers = {
                 "Authorization": clickup_token,
                 "Content-Type": "application/json"
             }
 
             response = requests.get(
-                f"https://api.clickup.com/api/v2/task/{task_id}/attachment",
+                f"https://api.clickup.com/api/v2/task/{task_id}",
                 headers=headers
             )
 
             if not response.ok:
-                logger.error(f"Failed to fetch attachments: {response.status_code} - {response.text}")
+                logger.error(f"Failed to fetch task for attachments: {response.status_code} - {response.text}")
                 return jsonify({
-                    "error": f"Failed to fetch attachments from ClickUp: {response.status_code}"
+                    "error": f"Failed to fetch task from ClickUp: {response.status_code}"
                 }), response.status_code
 
-            attachments_data = response.json()
+            task_data = response.json()
 
-            # Process attachments to ensure consistent format
-            attachments = attachments_data.get('attachments', [])
+            # Extract attachments array from task object
+            attachments = task_data.get('attachments', [])
             processed_attachments = []
 
             for att in attachments:
@@ -2118,13 +2139,46 @@ def serve_wait_node():
     return render_template('secured/wait-node.html')
 
 
+@app.route('/portal')
+@login_required
+@rate_limiter.rate_limit(limit='100 per hour')
+def portal_home():
+    """
+    Company Portal home page
+    Displays sidebar with all available apps
+    """
+    # Log portal access
+    logger.info(f"Portal accessed by {request.user.get('email')}")
+
+    # Get user role for permission filtering
+    user_role = request.user.get('role', 'user')
+
+    # Get sidebar items based on permissions
+    portal_apps = portal_registry.get_sidebar_items(user_role)
+
+    # Render portal with first app selected by default
+    default_app = portal_apps[0] if portal_apps else None
+
+    return render_template(
+        'portal/base.html',
+        portal_apps=portal_apps,
+        user_email=request.user.get('email'),
+        current_app_id=default_app['id'] if default_app else None,
+        current_app_name=default_app['name'] if default_app else 'Portal',
+        current_app_icon=default_app['icon'] if default_app else 'fas fa-home',
+        current_app_description=default_app['description'] if default_app else ''
+    )
+
+
 @app.route('/pages/health')
 def pages_health():
     """Health check for secure pages - no auth required"""
     return jsonify({
         'status': 'healthy',
         'pages_available': True,
-        'pages': ['wait-node', 'wait-node-v2', 'wait-node-editable', 'task-helper']
+        'pages': ['wait-node', 'wait-node-v2', 'wait-node-editable', 'task-helper'],
+        'portal_enabled': True,
+        'portal_apps': portal_registry.get_app_count()
     }), 200
 
 
