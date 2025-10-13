@@ -1688,7 +1688,7 @@
                     {/* Step 1: Generate AI Analysis Button (shown when in idle state) */}
                     {escalationText && aiGenerationState === 'idle' && (
                         <button
-                            onClick={generateAIAnalysis}
+                            onClick={() => generateAIAnalysis(false)}
                             disabled={isSubmitting}
                             className="w-full px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 font-semibold"
                         >
@@ -1715,7 +1715,7 @@
                                 <p className="text-sm text-red-600 mt-1">{generationError}</p>
                             </div>
                             <button
-                                onClick={generateAIAnalysis}
+                                onClick={() => generateAIAnalysis(false)}
                                 className="w-full px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold"
                             >
                                 🔄 Retry AI Generation
