@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Company Portal - {{ current_app_name|default('Dashboard') }}</title>
+
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Portal Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='portal/css/portal.css') }}">
+
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="portal-wrapper">
+        <!-- Top Header Bar -->
+        <header class="portal-header">
+            <div class="portal-header-left">
+                <h1 class="portal-title">
+                    <i class="fas fa-building"></i>
+                    Company Portal
+                </h1>
+            </div>
+            <div class="portal-header-right">
+                <span class="user-email">{{ user_email }}</span>
+                <a href="/auth/logout" class="btn-logout">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Logout
+                </a>
+            </div>
+        </header>
+
+        <div class="portal-container">
+            <!-- Left Sidebar Navigation -->
+            <nav class="portal-sidebar">
+                <div class="sidebar-header">
+                    <h2>Applications</h2>
+                </div>
+
+                <div class="portal-apps">
+                    {% for app in portal_apps %}
+                    <a href="#"
+                       data-app-url="{{ app.route }}"
+                       class="portal-app-item {% if current_app_id == app.id %}active{% endif %}"
+                       title="{{ app.description }}"
+                       onclick="loadApp('{{ app.route }}', '{{ app.name }}', '{{ app.icon }}', '{{ app.description }}'); return false;">
+                        <i class="{{ app.icon }}"></i>
+                        <span class="app-name">{{ app.name }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+
+                <div class="sidebar-footer">
+                    <div class="app-count">
+                        {{ portal_apps|length }} Apps Available
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Right Content Panel -->
+            <main class="portal-content">
+                <div class="content-header">
+                    <h2 class="content-title" id="app-title">
+                        <i class="fas fa-home" id="app-icon"></i>
+                        <span id="app-name">Select an Application</span>
+                    </h2>
+                    <p class="content-description" id="app-description"></p>
+                </div>
+
+                <div class="content-body" id="app-content">
+                    <div class="welcome-message">
+                        <i class="fas fa-hand-wave"></i>
+                        <h3>Welcome to the Company Portal</h3>
+                        <p>Select an application from the left sidebar to get started.</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        // Load app content dynamically into the portal
+        async function loadApp(appUrl, appName, appIcon, appDescription) {
+            // Update header
+            document.getElementById('app-icon').className = appIcon;
+            document.getElementById('app-name').textContent = appName;
+            document.getElementById('app-description').textContent = appDescription || '';
+
+            // Update active state in sidebar
+            document.querySelectorAll('.portal-app-item').forEach(item => {
+                item.classList.remove('active');
+                if (item.getAttribute('data-app-url') === appUrl) {
+                    item.classList.add('active');
+                }
+            });
+
+            // Show loading state
+            const contentBody = document.getElementById('app-content');
+            contentBody.innerHTML = '<div class="loading" style="text-align: center; padding: 40px;"><i class="fas fa-spinner fa-spin" style="font-size: 32px; color: var(--primary-color);"></i><p>Loading...</p></div>';
+
+            try {
+                // Fetch app content
+                const response = await fetch(appUrl, {
+                    credentials: 'include',
+                    headers: {
+                        'Accept': 'text/html'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const html = await response.text();
+
+                // Extract body content from the response (app should return just the app HTML)
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const appContent = doc.body.innerHTML;
+
+                // Inject the app content
+                contentBody.innerHTML = appContent;
+
+                // Execute any scripts in the loaded content
+                const scripts = contentBody.querySelectorAll('script');
+                scripts.forEach(oldScript => {
+                    const newScript = document.createElement('script');
+                    Array.from(oldScript.attributes).forEach(attr => {
+                        newScript.setAttribute(attr.name, attr.value);
+                    });
+                    newScript.textContent = oldScript.textContent;
+                    oldScript.parentNode.replaceChild(newScript, oldScript);
+                });
+
+            } catch (error) {
+                console.error('Failed to load app:', error);
+                contentBody.innerHTML = `
+                    <div class="error-message" style="background: #fed7d7; color: #c53030; padding: 20px; border-radius: 8px; margin: 20px;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Failed to load application: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        // Update browser URL without page reload
+        window.addEventListener('popstate', function(e) {
+            if (e.state && e.state.appUrl) {
+                loadApp(e.state.appUrl, e.state.appName, e.state.appIcon, e.state.appDescription);
+            }
+        });
+    </script>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

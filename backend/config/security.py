@@ -24,7 +24,9 @@ class SecureConfig:
     SESSION_COOKIE_SECURE = os.environ.get('FLASK_ENV') == 'production'  # HTTPS only in prod
     SESSION_COOKIE_DOMAIN = None  # Don't set domain - let browser handle it
     SESSION_COOKIE_HTTPONLY = True  # No JavaScript access
-    SESSION_COOKIE_SAMESITE = 'None'  # Changed from 'Lax' to allow cross-site POST for token exchange
+    # Use 'Lax' for local dev (SameSite=None requires Secure=True which needs HTTPS)
+    # Use 'None' for production cross-domain scenarios
+    SESSION_COOKIE_SAMESITE = 'None' if os.environ.get('FLASK_ENV') == 'production' else 'Lax'
     PERMANENT_SESSION_LIFETIME = timedelta(hours=24)  # Auto-expire after 24 hours
     
     # Redis Configuration

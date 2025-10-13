@@ -84,6 +84,7 @@ def init_redis(app):
         logger.info("Redis connection established successfully")
     except Exception as e:
         logger.error(f"Redis connection failed: {e}")
+        redis_client = None  # Clear broken connection
         raise
     
     return redis_client
@@ -282,7 +283,8 @@ def login():
     Uses OAuth state parameter to securely store redirect URL (OAuth 2.0 best practice)
     """
     # Get the URL user was trying to access (set by @login_required decorator)
-    redirect_url = session.pop('next_url', current_app.config['FRONTEND_URL'])
+    # Default to BACKEND_URL for standalone portal usage
+    redirect_url = session.pop('next_url', current_app.config['BACKEND_URL'])
 
     # Validate redirect URL against whitelist
     allowed_hosts = [
