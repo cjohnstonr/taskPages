@@ -961,16 +961,17 @@ button:active .refresh-icon {
 
 .calendar-day-empty {
     background: transparent;
-    min-height: 100px;
+    height: 120px; /* Match active day height */
 }
 
 .calendar-day-v3 {
     background: #1F2937;
-    min-height: 100px;
+    height: 120px; /* Fixed height for symmetry */
     padding: 4px;
     position: relative;
     cursor: pointer;
     transition: background 0.2s;
+    overflow: hidden; /* Prevent content from breaking out */
 }
 
 .calendar-day-v3:hover {
