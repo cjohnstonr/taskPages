@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Field Operations Planning | OodaTools</title>
+    <style>
+        /* Global Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f7fa;
+            color: #2c3e50;
+            overflow: hidden;
+        }
+
+        /* Three-Panel Layout */
+        .main-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* LEFT PANEL - Unplanned Field Operations */
+        .left-panel {
+            width: 320px;
+            background: white;
+            border-right: 1px solid #e1e4e8;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 20px;
+            border-bottom: 1px solid #e1e4e8;
+            background: #fafbfc;
+        }
+
+        .panel-header h2 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #24292e;
+            margin-bottom: 4px;
+        }
+
+        .panel-header p {
+            font-size: 13px;
+            color: #6a737d;
+        }
+
+        .unplanned-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+
+        .field-op-card {
+            background: white;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: grab;
+            transition: all 0.2s;
+        }
+
+        .field-op-card:hover {
+            border-color: #0366d6;
+            box-shadow: 0 2px 8px rgba(3, 102, 214, 0.15);
+        }
+
+        .field-op-card.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+
+        .field-op-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #24292e;
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+
+        .field-op-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 12px;
+            color: #6a737d;
+        }
+
+        .meta-tag {
+            background: #f6f8fa;
+            padding: 2px 8px;
+            border-radius: 3px;
+            border: 1px solid #e1e4e8;
+        }
+
+        /* CENTER PANEL - Calendar */
+        .center-panel {
+            flex: 1;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .calendar-header {
+            padding: 20px;
+            border-bottom: 1px solid #e1e4e8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #fafbfc;
+        }
+
+        .calendar-header h2 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #24292e;
+        }
+
+        .calendar-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            background: white;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: #f6f8fa;
+            border-color: #0366d6;
+        }
+
+        .btn-primary {
+            background: #0366d6;
+            color: white;
+            border-color: #0366d6;
+        }
+
+        .btn-primary:hover {
+            background: #0256c4;
+        }
+
+        .calendar-grid {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .mini-calendar {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+            background: #e1e4e8;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .calendar-day-header {
+            background: #f6f8fa;
+            padding: 12px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: #6a737d;
+            text-transform: uppercase;
+        }
+
+        .calendar-day {
+            background: white;
+            padding: 8px;
+            min-height: 100px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .calendar-day:hover {
+            background: #f6f8fa;
+        }
+
+        .calendar-day.drop-zone {
+            border: 2px dashed #0366d6;
+            background: #f1f8ff;
+        }
+
+        .day-number {
+            font-size: 14px;
+            font-weight: 600;
+            color: #24292e;
+            margin-bottom: 4px;
+        }
+
+        .calendar-day.other-month .day-number {
+            color: #959da5;
+        }
+
+        .calendar-day.today {
+            background: #f1f8ff;
+        }
+
+        .calendar-day.today .day-number {
+            color: #0366d6;
+        }
+
+        .site-visit-event {
+            background: #dfe2ff;
+            border-left: 3px solid #0366d6;
+            padding: 4px 6px;
+            margin: 2px 0;
+            border-radius: 3px;
+            font-size: 11px;
+            line-height: 1.3;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .site-visit-event:hover {
+            background: #c8d3ff;
+            transform: translateX(2px);
+        }
+
+        .site-visit-vendor {
+            font-weight: 600;
+            color: #0366d6;
+        }
+
+        .site-visit-count {
+            font-size: 10px;
+            color: #6a737d;
+            margin-top: 2px;
+        }
+
+        /* RIGHT PANEL - Site Visit Detail */
+        .right-panel {
+            width: 360px;
+            background: white;
+            border-left: 1px solid #e1e4e8;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .detail-header {
+            padding: 20px;
+            border-bottom: 1px solid #e1e4e8;
+            background: #fafbfc;
+        }
+
+        .detail-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #24292e;
+            margin-bottom: 8px;
+        }
+
+        .detail-meta {
+            font-size: 13px;
+            color: #6a737d;
+        }
+
+        .detail-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .detail-section {
+            margin-bottom: 24px;
+        }
+
+        .detail-section h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #24292e;
+            margin-bottom: 12px;
+        }
+
+        .linked-field-op-item {
+            background: #f6f8fa;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+        }
+
+        .linked-field-op-info {
+            flex: 1;
+        }
+
+        .linked-field-op-name {
+            font-size: 13px;
+            font-weight: 500;
+            color: #24292e;
+            margin-bottom: 4px;
+        }
+
+        .linked-field-op-status {
+            font-size: 12px;
+            color: #6a737d;
+        }
+
+        .btn-remove {
+            background: #ffeef0;
+            border: 1px solid #fdaeb7;
+            color: #cb2431;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-remove:hover {
+            background: #ffdddf;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #6a737d;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+
+        .empty-state h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #24292e;
+            margin-bottom: 8px;
+        }
+
+        .empty-state p {
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        /* Loading & States */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #0366d6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #ffeef0;
+            border: 1px solid #fdaeb7;
+            color: #cb2431;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin: 12px;
+            font-size: 13px;
+        }
+
+        .success {
+            background: #dcffe4;
+            border: 1px solid #85e89d;
+            color: #22863a;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin: 12px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- LEFT PANEL: Unplanned Field Operations -->
+        <div class="left-panel">
+            <div class="panel-header">
+                <h2>Unplanned Field Operations</h2>
+                <p id="propertyNameDisplay">Loading...</p>
+            </div>
+            <div class="unplanned-list" id="unplannedList">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CENTER PANEL: Calendar -->
+        <div class="center-panel">
+            <div class="calendar-header">
+                <h2 id="calendarMonthYear">Loading...</h2>
+                <div class="calendar-controls">
+                    <button class="btn" id="prevMonthBtn">← Previous</button>
+                    <button class="btn" id="todayBtn">Today</button>
+                    <button class="btn" id="nextMonthBtn">Next →</button>
+                    <button class="btn-primary" id="refreshBtn">🔄 Refresh</button>
+                </div>
+            </div>
+            <div class="calendar-grid" id="calendarGrid">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL: Site Visit Detail -->
+        <div class="right-panel">
+            <div class="detail-header">
+                <div class="detail-title" id="detailTitle">No Site Visit Selected</div>
+                <div class="detail-meta" id="detailMeta">Select a site visit from the calendar to view details</div>
+            </div>
+            <div class="detail-content" id="detailContent">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📋</div>
+                    <h3>Site Visit Details</h3>
+                    <p>Click on a site visit in the calendar to view and manage linked field operations.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get property ID from URL query parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const propertyId = urlParams.get('property_id');
+
+        if (!propertyId) {
+            alert('Property ID required');
+            window.location.href = '/pages/property-dashboard';
+        }
+
+        // Detect local dev mode vs production (check if URL contains '/local/')
+        const isLocalDev = window.location.pathname.includes('/local/');
+        const apiPrefix = isLocalDev ? '/api/local' : '/api';
+
+        // State
+        let currentDate = new Date();
+        let unplannedFieldOps = [];
+        let siteVisits = [];
+        let selectedSiteVisit = null;
+
+        // Initialize
+        async function init() {
+            await loadData();
+            renderCalendar();
+        }
+
+        // Load data from API
+        async function loadData() {
+            try {
+                // Load unplanned field operations
+                const unplannedRes = await fetch(`${apiPrefix}/property/${propertyId}/field-operations/unplanned`);
+                const unplannedData = await unplannedRes.json();
+
+                if (unplannedData.success) {
+                    unplannedFieldOps = unplannedData.unplanned_field_operations;
+                    renderUnplannedList();
+                }
+
+                // Load site visits
+                const siteVisitsRes = await fetch(`${apiPrefix}/property/${propertyId}/site-visits`);
+                const siteVisitsData = await siteVisitsRes.json();
+
+                if (siteVisitsData.success) {
+                    siteVisits = siteVisitsData.site_visits;
+                    renderCalendar();
+                }
+
+            } catch (error) {
+                console.error('Error loading data:', error);
+                showError('Failed to load data. Please refresh the page.');
+            }
+        }
+
+        // Render unplanned field operations list
+        function renderUnplannedList() {
+            const container = document.getElementById('unplannedList');
+
+            if (unplannedFieldOps.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">✅</div>
+                        <h3>All Planned!</h3>
+                        <p>No unplanned field operations for this property.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = unplannedFieldOps.map(fieldOp => `
+                <div class="field-op-card" draggable="true" data-id="${fieldOp.id}">
+                    <div class="field-op-name">${fieldOp.name}</div>
+                    <div class="field-op-meta">
+                        ${fieldOp.custom_item_id ? `<span class="meta-tag">${fieldOp.custom_item_id}</span>` : ''}
+                        ${fieldOp.status ? `<span class="meta-tag">${fieldOp.status}</span>` : ''}
+                    </div>
+                </div>
+            `).join('');
+
+            // Add drag listeners
+            container.querySelectorAll('.field-op-card').forEach(card => {
+                card.addEventListener('dragstart', handleDragStart);
+                card.addEventListener('dragend', handleDragEnd);
+            });
+        }
+
+        // Render calendar
+        function renderCalendar() {
+            const container = document.getElementById('calendarGrid');
+            const monthYear = document.getElementById('calendarMonthYear');
+
+            // Set header
+            monthYear.textContent = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+            // Generate calendar grid
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const daysInMonth = lastDay.getDate();
+            const startingDayOfWeek = firstDay.getDay();
+
+            let calendarHTML = '';
+
+            // Day headers
+            ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(day => {
+                calendarHTML += `<div class="calendar-day-header">${day}</div>`;
+            });
+
+            // Empty cells before first day
+            for (let i = 0; i < startingDayOfWeek; i++) {
+                calendarHTML += `<div class="calendar-day other-month"></div>`;
+            }
+
+            // Days of month
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(year, month, day);
+                const dateStr = date.toISOString().split('T')[0];
+                const isToday = dateStr === new Date().toISOString().split('T')[0];
+
+                // Find site visits for this day
+                const daySiteVisits = siteVisits.filter(sv => {
+                    if (!sv.site_visit_date) return false;
+                    const visitDate = new Date(sv.site_visit_date).toISOString().split('T')[0];
+                    return visitDate === dateStr;
+                });
+
+                calendarHTML += `
+                    <div class="calendar-day ${isToday ? 'today' : ''}"
+                         data-date="${dateStr}"
+                         ondrop="handleDrop(event)"
+                         ondragover="handleDragOver(event)"
+                         ondragleave="handleDragLeave(event)">
+                        <div class="day-number">${day}</div>
+                        ${daySiteVisits.map(sv => `
+                            <div class="site-visit-event" onclick="selectSiteVisit('${sv.id}')">
+                                <div class="site-visit-vendor">${sv.vendor ? (sv.vendor.name || 'Vendor') : 'No vendor'}</div>
+                                <div class="site-visit-count">${sv.linked_field_operations_count || 0} field ops</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            container.innerHTML = `<div class="mini-calendar">${calendarHTML}</div>`;
+        }
+
+        // Drag and drop handlers
+        let draggedFieldOpId = null;
+
+        function handleDragStart(e) {
+            draggedFieldOpId = e.target.dataset.id;
+            e.target.classList.add('dragging');
+        }
+
+        function handleDragEnd(e) {
+            e.target.classList.remove('dragging');
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('drop-zone');
+        }
+
+        function handleDragLeave(e) {
+            e.currentTarget.classList.remove('drop-zone');
+        }
+
+        async function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('drop-zone');
+
+            if (!draggedFieldOpId) return;
+
+            const date = e.currentTarget.dataset.date;
+            const timestamp = new Date(date).getTime();
+
+            // Show confirmation or create site visit
+            if (confirm(`Create new site visit on ${date} for this field operation?`)) {
+                await linkFieldOpToDate(draggedFieldOpId, timestamp);
+            }
+
+            draggedFieldOpId = null;
+        }
+
+        // Link field operation to date (create new site visit)
+        async function linkFieldOpToDate(fieldOpId, timestamp) {
+            try {
+                const response = await fetch(`${apiPrefix}/property/${propertyId}/site-visit/link-field-op`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        field_op_id: fieldOpId,
+                        site_visit_date: timestamp,
+                        vendor_id: null // TODO: Add vendor selection
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showSuccess('Field operation linked successfully!');
+                    await loadData();
+                } else {
+                    showError(result.error || 'Failed to link field operation');
+                }
+            } catch (error) {
+                console.error('Error linking field op:', error);
+                showError('Failed to link field operation');
+            }
+        }
+
+        // Select site visit
+        async function selectSiteVisit(siteVisitId) {
+            try {
+                const response = await fetch(`${apiPrefix}/site-visit/${siteVisitId}/details`);
+                const data = await response.json();
+
+                if (data.success) {
+                    selectedSiteVisit = data.site_visit;
+                    renderSiteVisitDetail();
+                }
+            } catch (error) {
+                console.error('Error loading site visit details:', error);
+                showError('Failed to load site visit details');
+            }
+        }
+
+        // Render site visit detail panel
+        function renderSiteVisitDetail() {
+            if (!selectedSiteVisit) return;
+
+            document.getElementById('detailTitle').textContent = selectedSiteVisit.name;
+            document.getElementById('detailMeta').textContent = `${selectedSiteVisit.linked_field_operations_count} field operations`;
+
+            const content = document.getElementById('detailContent');
+            content.innerHTML = `
+                <div class="detail-section">
+                    <h3>Linked Field Operations</h3>
+                    ${selectedSiteVisit.linked_field_operations.map(fieldOp => `
+                        <div class="linked-field-op-item">
+                            <div class="linked-field-op-info">
+                                <div class="linked-field-op-name">${fieldOp.name}</div>
+                                <div class="linked-field-op-status">${fieldOp.status}</div>
+                            </div>
+                            <button class="btn-remove" onclick="unlinkFieldOp('${fieldOp.id}', '${selectedSiteVisit.id}')">
+                                Remove
+                            </button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        // Unlink field operation
+        async function unlinkFieldOp(fieldOpId, siteVisitId) {
+            if (!confirm('Remove this field operation from the site visit?')) return;
+
+            try {
+                const response = await fetch(`${apiPrefix}/property/${propertyId}/site-visit/unlink-field-op`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        field_op_id: fieldOpId,
+                        site_visit_id: siteVisitId
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showSuccess('Field operation removed successfully!');
+                    selectedSiteVisit = null;
+                    await loadData();
+                } else {
+                    showError(result.error || 'Failed to unlink field operation');
+                }
+            } catch (error) {
+                console.error('Error unlinking field op:', error);
+                showError('Failed to unlink field operation');
+            }
+        }
+
+        // Calendar navigation
+        document.getElementById('prevMonthBtn').addEventListener('click', () => {
+            currentDate.setMonth(currentDate.getMonth() - 1);
+            renderCalendar();
+        });
+
+        document.getElementById('nextMonthBtn').addEventListener('click', () => {
+            currentDate.setMonth(currentDate.getMonth() + 1);
+            renderCalendar();
+        });
+
+        document.getElementById('todayBtn').addEventListener('click', () => {
+            currentDate = new Date();
+            renderCalendar();
+        });
+
+        document.getElementById('refreshBtn').addEventListener('click', loadData);
+
+        // Utility functions
+        function showError(message) {
+            // TODO: Implement toast notification
+            alert('Error: ' + message);
+        }
+
+        function showSuccess(message) {
+            // TODO: Implement toast notification
+            console.log('Success:', message);
+        }
+
+        // Initialize on page load
+        init();
+    </script>
+</body>
+</html>

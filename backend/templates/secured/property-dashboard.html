@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Property Dashboard | OodaTools</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/property-dashboard.css') }}?v=20251019-v2">
+</head>
+<body>
+    <!-- Main Application Container -->
+    <div id="app-container">
+        <!-- Main Sidebar (Left-most, Always Visible) -->
+        <aside id="main-sidebar">
+            <div class="sidebar-header">
+                <h2>OodaTools</h2>
+                <div class="header-divider"></div>
+            </div>
+
+            <nav class="app-list">
+                <a href="#" class="app-item active" data-app="properties">
+                    <span class="app-icon">📦</span>
+                    <span class="app-name">Properties</span>
+                </a>
+                <!-- Future apps will be added here -->
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <span class="user-email" id="userEmail">Loading...</span>
+                </div>
+                <a href="/auth/logout" class="logout-link">Logout</a>
+            </div>
+        </aside>
+
+        <!-- Dynamic Content Area -->
+        <main id="content-area">
+            <!-- Loading State (shown initially) -->
+            <div id="loading-state" class="loading-state">
+                <div class="spinner"></div>
+                <p>Loading properties...</p>
+            </div>
+
+            <!-- Property List View (default view after loading) -->
+            <div id="property-list-view" class="view-container" style="display: none;">
+                <div class="view-header">
+                    <h1>Property Management</h1>
+                    <button id="refreshBtn" class="btn-icon" title="Refresh data">
+                        <span class="refresh-icon">🔄</span>
+                    </button>
+                </div>
+
+                <div class="search-container">
+                    <input
+                        type="text"
+                        id="propertySearch"
+                        class="search-input"
+                        placeholder="🔍 Search properties by name, address, or owner..."
+                        autocomplete="off"
+                    >
+                    <span class="search-clear" id="searchClear" style="display: none;">×</span>
+                </div>
+
+                <div class="property-stats">
+                    <span class="stat-item">
+                        Total: <strong id="totalCount">0</strong>
+                    </span>
+                    <span class="stat-item">
+                        OODA: <strong id="oodaCount">0</strong>
+                    </span>
+                    <span class="stat-item">
+                        HELM: <strong id="helmCount">0</strong>
+                    </span>
+                </div>
+
+                <!-- OODA Properties Section -->
+                <div class="property-group">
+                    <h2 class="group-header">
+                        <span>OODA PROPERTIES</span>
+                        <span class="group-count" id="oodaDisplayCount">0</span>
+                    </h2>
+                    <div id="oodaProperties" class="property-list">
+                        <!-- Property cards will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- HELM Properties Section -->
+                <div class="property-group">
+                    <h2 class="group-header">
+                        <span>HELM PROPERTIES</span>
+                        <span class="group-count" id="helmDisplayCount">0</span>
+                    </h2>
+                    <div id="helmProperties" class="property-list">
+                        <!-- Property cards will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- No Results State -->
+                <div id="noResults" class="empty-state" style="display: none;">
+                    <p>No properties found matching <strong id="searchTerm"></strong></p>
+                    <p class="empty-state-hint">Try a different search term or clear the filter.</p>
+                </div>
+            </div>
+
+            <!-- Property Detail View (shown when property selected) -->
+            <div id="property-detail-view" class="view-container" style="display: none;">
+                <!-- Property Sidebar (Secondary Sidebar) -->
+                <aside id="property-sidebar">
+                    <div class="property-header">
+                        <h3 id="propertyName">Loading...</h3>
+                        <p class="property-address" id="propertyAddress"></p>
+                        <p class="property-owner" id="propertyOwner"></p>
+                    </div>
+
+                    <nav class="module-list">
+                        <a href="#" class="module-item active" data-module="calendar">
+                            <span class="module-icon">📅</span>
+                            <span class="module-name">Calendar</span>
+                        </a>
+                        <!-- Future modules will be added here:
+                        - Reservations
+                        - Cleanings
+                        - Field Operations
+                        - Owner Info
+                        - Activity Log
+                        -->
+                    </nav>
+
+                    <div class="sidebar-actions">
+                        <button id="backToPropertiesBtn" class="btn-secondary">
+                            ← Back to Properties
+                        </button>
+                    </div>
+                </aside>
+
+                <!-- Module Content Area -->
+                <div id="module-content-area">
+                    <!-- Calendar Module (V1 - Placeholder) -->
+                    <div id="calendarModule" class="module-container">
+                        <div class="module-header">
+                            <h2>Calendar</h2>
+                            <div class="module-controls">
+                                <select id="calendarViewSelect" class="view-select">
+                                    <option value="month">Month View</option>
+                                    <option value="3month">3-Month View</option>
+                                </select>
+                                <button id="calendarRefreshBtn" class="btn-icon" title="Refresh calendar">
+                                    <span class="refresh-icon">🔄</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="calendarContent" class="calendar-content">
+                            <!-- Calendar will be rendered here -->
+                        </div>
+
+                        <!-- Empty State for V1 -->
+                        <div class="calendar-empty-state">
+                            <div class="empty-state-icon">📅</div>
+                            <h3>Calendar loaded successfully</h3>
+                            <p>Events will appear here in future updates</p>
+                            <p class="empty-state-hint">
+                                V2 will display: Reservations, Cleanings, Field Operations, and Calendar Blocks
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error State -->
+            <div id="error-state" class="error-state" style="display: none;">
+                <div class="error-icon">⚠️</div>
+                <h3 id="errorTitle">Unable to load properties</h3>
+                <p id="errorMessage">Please check your connection and try again.</p>
+                <button id="retryBtn" class="btn-primary">Retry</button>
+            </div>
+        </main>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="{{ url_for('static', filename='js/calendar-data-model.js') }}?v=20251019-v2"></script>
+    <script src="{{ url_for('static', filename='js/calendar-module-v3.js') }}?v=20251019-v2"></script>
+    <script src="{{ url_for('static', filename='js/property-dashboard.js') }}?v=20251019-v2"></script>
+
+    <!-- DEBUG-REMOVE-START -->
+    <!-- Debug Overlay - Remove for production or disable with ?debug=false -->
+    <script src="{{ url_for('static', filename='js/debug/DebugOverlay.js') }}?v=20251019"></script>
+    <!-- DEBUG-REMOVE-END -->
+</body>
+</html>
