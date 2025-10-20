@@ -258,21 +258,45 @@ def login_required(f):
             if user_session:
                 request.user = user_session
                 return f(*args, **kwargs)
-        
+
         # Fallback to cookie session (same-origin pages)
         user_session = get_user_session()
         if not user_session:
             if request.is_json:
                 return jsonify({'error': 'Authentication required'}), 401
-            
+
             # Store the URL the user was trying to access
             session['next_url'] = request.url
             return redirect(url_for('auth.login'))
-        
+
         # Add user info to request context
         request.user = user_session
         return f(*args, **kwargs)
-    
+
+    return decorated_function
+
+
+def login_required_with_local_dev(f):
+    """
+    Decorator that supports both OAuth (production) and local dev mode
+    In local dev mode, bypasses OAuth if session has user_email
+    In production, falls back to standard OAuth validation
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Check if we're in local dev mode with a valid session
+        if current_app.config.get('IS_LOCAL_DEV') and session.get('user_email'):
+            # Create minimal user context for local dev
+            request.user = {
+                'email': session.get('user_email'),
+                'name': 'Local Dev User',
+                'picture': None
+            }
+            return f(*args, **kwargs)
+
+        # Production: use normal OAuth validation
+        return login_required(f)(*args, **kwargs)
+
     return decorated_function
 
 
