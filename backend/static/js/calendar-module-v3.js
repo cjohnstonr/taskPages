@@ -5,7 +5,8 @@
 
 const CalendarState = {
     masterCalendar: null,
-    currentMonthIndex: 3 // Index in months array (0-6, center is 3)
+    currentMonthIndex: 3, // Index in months array (0-6, center is 3)
+    eventDetailPanel: null // EventDetailPanel instance
 };
 
 /**
@@ -18,6 +19,12 @@ async function initializeCalendar(containerId, propertyId) {
     if (!container) {
         console.error('[Calendar] Container not found:', containerId);
         return;
+    }
+
+    // Initialize EventDetailPanel
+    if (!CalendarState.eventDetailPanel) {
+        CalendarState.eventDetailPanel = new EventDetailPanel();
+        console.log('[Calendar] EventDetailPanel initialized');
     }
 
     // Build master calendar data structure
@@ -202,23 +209,25 @@ function createEventBar(event) {
 }
 
 /**
- * Show event details modal/popup (V2 implementation)
+ * Show event details in side panel
  */
 function showEventDetails(event) {
     console.log('[Calendar] Show event details:', event);
 
-    // Simple alert for V2 - TODO: Replace with modal
-    const details = [
-        `Reservation: ${event.title}`,
-        `Check-in: ${event.check_in}`,
-        `Check-out: ${event.check_out}`,
-        `Duration: ${event.duration_days} days`,
-        `Status: ${event.status}`,
-        ``,
-        `View in ClickUp: ${event.url}`
-    ].join('\n');
+    // Transform event data to match EventDetailPanel expected format
+    const eventData = {
+        id: event.id,
+        name: event.title,
+        type: event.type,
+        clickupUrl: event.url,
+        checkIn: event.check_in_timestamp,
+        checkOut: event.check_out_timestamp,
+        status: event.status,
+        customFields: event.custom_fields || {}
+    };
 
-    alert(details);
+    // Open the panel
+    CalendarState.eventDetailPanel.open(eventData);
 }
 
 // Public API
