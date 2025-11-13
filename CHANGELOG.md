@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## [2025-11-12] - Type: UI
+- Change: Implemented Markdown rendering for AI Summary and AI Suggestion dialog boxes with mobile-responsive styling
+- Files: backend/templates/secured/escalationv3.html
+- State impact: None
+- Field mutations: None
+- Performance: No measurable impact - leverages existing marked.js and DOMPurify libraries
+
+**Major Changes**:
+- Updated all AI Summary boxes (3 locations) to render Markdown using `renderMarkdown()` helper
+- Updated all AI Suggestion boxes (3 locations) to render Markdown using `renderMarkdown()` helper
+- Added comprehensive mobile-responsive CSS for `.prose` and `.prose-sm` classes
+- Implemented word-break for code elements to prevent horizontal overflow on mobile
+- Added mobile-specific media query (@max-width: 640px) for optimized font sizes and spacing
+
+**UI Improvements**:
+- AI-generated content now supports formatted text: headers, bold, italics, lists, code blocks
+- Improved readability on mobile devices with responsive typography
+- Code blocks properly styled with syntax highlighting and horizontal scrolling
+- Blockquotes and lists properly indented and styled
+- Safe HTML rendering with DOMPurify sanitization
+
+**Technical Details**:
+- Uses existing `renderMarkdown(text)` function: `DOMPurify.sanitize(marked.parse(text))`
+- Applied `prose prose-sm max-w-none` classes for consistent styling
+- Mobile optimizations include reduced font sizes, adjusted padding, and full-width code blocks
+- All markdown rendering uses `dangerouslySetInnerHTML` with DOMPurify protection
+
 ## [2025-09-30] - Type: UI
 - Change: Complete redesign of task-helper interface to prioritize escalation context over custom fields
 - Files: backend/templates/secured/task-helper.html
