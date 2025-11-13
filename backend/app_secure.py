@@ -1364,6 +1364,94 @@ def supervisor_response(task_id):
         return jsonify({"error": f"Failed to record supervisor response: {str(e)}"}), 500
 
 
+@app.route('/api/task-helper/reopen-escalation/<task_id>', methods=['POST'])
+@login_required
+@rate_limiter.rate_limit(limit='10 per minute')
+def reopen_escalation(task_id):
+    """
+    Reopen a resolved escalation by changing status back to "Not Escalated"
+    Allows users to resubmit escalations if needed
+    """
+    try:
+        # Log reopen action for audit
+        logger.info(f"Reopening escalation for task {task_id} by {request.user.get('email')}")
+
+        # Get ClickUp API configuration
+        clickup_token = os.getenv('CLICKUP_API_KEY')
+        if not clickup_token:
+            logger.error("ClickUp API key not configured")
+            return jsonify({"error": "ClickUp integration not configured"}), 500
+
+        # Custom field ID for escalation status
+        escalation_status_field_id = '8d784bd0-18e5-4db3-b45e-9a2900262e04'
+
+        try:
+            # Update escalation status to "Not Escalated" (orderindex 0)
+            headers = {
+                "Authorization": clickup_token,
+                "Content-Type": "application/json"
+            }
+
+            field_response = requests.post(
+                f"https://api.clickup.com/api/v2/task/{task_id}/field/{escalation_status_field_id}",
+                headers=headers,
+                json={"value": 0}  # orderindex 0 = 'Not Escalated'
+            )
+
+            if not field_response.ok:
+                logger.error(f"Failed to update escalation status: {field_response.text}")
+                return jsonify({"error": "Failed to update escalation status in ClickUp"}), 500
+
+            logger.info(f"Successfully reopened escalation for task {task_id}")
+
+            # Add comment to task for audit trail
+            reopen_comment = f"""🔄 **ESCALATION REOPENED**
+
+**Status changed to**: Not Escalated
+**Reopened by**: {request.user.get('email')}
+**Reopen Time**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
+
+This escalation can now be resubmitted if needed.
+
+----
+*This action was recorded via Task Helper*"""
+
+            comment_response = requests.post(
+                f"https://api.clickup.com/api/v2/task/{task_id}/comment",
+                headers={
+                    "Authorization": clickup_token,
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "comment_text": reopen_comment,
+                    "notify_all": False
+                }
+            )
+
+            if not comment_response.ok:
+                logger.warning(f"Failed to add reopen comment: {comment_response.text}")
+
+            # Success response
+            response_data = {
+                "success": True,
+                "message": "Escalation reopened successfully",
+                "task_id": task_id,
+                "reopened_by": request.user.get('email'),
+                "new_status": "Not Escalated",
+                "timestamp": datetime.now().isoformat()
+            }
+
+            return jsonify(response_data)
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"ClickUp API request failed: {e}")
+            return jsonify({"error": "Failed to communicate with ClickUp API"}), 500
+
+    except Exception as e:
+        logger.error(f"Error reopening escalation for task {task_id}: {e}")
+        return jsonify({"error": f"Failed to reopen escalation: {str(e)}"}), 500
+
+
 @app.route('/api/task-helper/request-info/<task_id>', methods=['POST'])
 @login_required
 @rate_limiter.rate_limit(limit='10 per minute')

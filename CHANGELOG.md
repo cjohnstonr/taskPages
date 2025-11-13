@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## [2025-11-12] - Type: State|UI|Field
+- Change: Refactored escalation resolved state logic and added reopen functionality
+- Files: backend/templates/secured/escalationv3.html, backend/app_secure.py
+- State impact: Changed isResolved condition from compound logic to explicit status check only
+- Field mutations: Escalation_Status field (8d784bd0) - added write capability via reopen endpoint
+- Performance: No measurable impact - single API call for reopen action
+
+**State Management Changes**:
+- Removed supervisorResponse from isResolved condition (line 1467)
+- Before: `const isResolved = escalationStatus === 'RESOLVED' || supervisorResponse;`
+- After: `const isResolved = escalationStatus === 'RESOLVED';`
+- Rationale: Explicit status control prevents implicit state changes from text field updates
+
+**New Functionality**:
+- Added "Reopen Escalation" button in resolved state UI with confirmation dialog
+- Created `/api/task-helper/reopen-escalation/<task_id>` POST endpoint
+- Reopen action sets Escalation_Status to 0 (Not Escalated) for resubmission
+- Maintains historical data (supervisor response, timestamps) for audit trail
+- Adds ClickUp comment with reopen metadata (user, timestamp)
+
+**Security & Audit**:
+- Endpoint protected with @login_required and rate limiting (10 per minute)
+- Full audit logging with user email and timestamps
+- ClickUp comment records reopening action for compliance
+
 ## [2025-11-12] - Type: UI
 - Change: Implemented Markdown rendering for AI Summary and AI Suggestion dialog boxes with mobile-responsive styling
 - Files: backend/templates/secured/escalationv3.html

@@ -1051,6 +1051,34 @@
             }
         };
 
+        const handleReopenEscalation = async () => {
+            if (!confirm('Are you sure you want to reopen this escalation? This will change the status back to "Not Escalated" so it can be resubmitted.')) {
+                return;
+            }
+
+            setIsSubmitting(true);
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/task-helper/reopen-escalation/${task.id}`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (response.ok) {
+                    alert('✅ Escalation reopened successfully! Status changed to "Not Escalated".');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    const errorData = await response.json();
+                    alert(`Failed to reopen escalation: ${errorData.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error reopening escalation:', error);
+                alert('Error reopening escalation');
+            } finally {
+                setIsSubmitting(false);
+            }
+        };
+
         return (
             <div className="bg-red-50 border-2 border-red-600 rounded-lg p-6">
                 {/* Escalation Context Display */}
@@ -1464,7 +1492,7 @@
         // Determine escalation state using proper UUID mapping
         const escalationStatus = getEscalationStatus(task);
         const isEscalated = escalationStatus === 'ESCALATED' || reason || aiSummary;
-        const isResolved = escalationStatus === 'RESOLVED' || supervisorResponse;
+        const isResolved = escalationStatus === 'RESOLVED';
         const isAwaitingResponse = isEscalated && !isResolved;
 
         // DEBUG: Log escalation state detection
@@ -1695,14 +1723,24 @@
         if (isResolved) {
             return (
                 <div className="bg-green-50 rounded-lg p-6">
-                    <div className="flex items-center mb-4">
-                        <span className="text-2xl mr-3">✅</span>
-                        <div>
-                            <h3 className="text-lg font-semibold text-green-900">Escalation Resolved</h3>
-                            <p className="text-sm text-green-700">
-                                Resolved on {resolvedTime ? new Date(resolvedTime).toLocaleString() : 'Unknown'}
-                            </p>
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center">
+                            <span className="text-2xl mr-3">✅</span>
+                            <div>
+                                <h3 className="text-lg font-semibold text-green-900">Escalation Resolved</h3>
+                                <p className="text-sm text-green-700">
+                                    Resolved on {resolvedTime ? new Date(resolvedTime).toLocaleString() : 'Unknown'}
+                                </p>
+                            </div>
                         </div>
+                        <button
+                            onClick={handleReopenEscalation}
+                            disabled={isSubmitting}
+                            className="px-4 py-2 bg-orange-600 text-white text-sm rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            title="Change status back to Not Escalated so this can be resubmitted"
+                        >
+                            🔄 Reopen Escalation
+                        </button>
                     </div>
 
                     <div className="space-y-4">
