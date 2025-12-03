@@ -265,6 +265,53 @@
         }
       }
 
+      /* Phase 6: Mobile view transition animations */
+      @media (max-width: 768px) {
+        .mobile-view-enter {
+          animation: slideInRight 0.3s ease-out;
+        }
+
+        .mobile-view-exit {
+          animation: slideOutLeft 0.3s ease-out;
+        }
+
+        @keyframes slideInRight {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+
+        @keyframes slideOutLeft {
+          from {
+            transform: translateX(0);
+            opacity: 1;
+          }
+          to {
+            transform: translateX(-100%);
+            opacity: 0;
+          }
+        }
+
+        /* FAB pulse animation */
+        @keyframes fabPulse {
+          0%, 100% {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+          }
+          50% {
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.5), 0 4px 6px -2px rgba(59, 130, 246, 0.25);
+          }
+        }
+
+        .fab-pulse {
+          animation: fabPulse 2s ease-in-out infinite;
+        }
+      }
+
       /* Ensure max-width doesn't constrain on mobile */
       .prose.max-w-none {
         max-width: none;
@@ -3641,6 +3688,80 @@
         );
     }
 
+    // Phase 3: Mobile View Toggle FAB Component
+    function MobileViewToggleFAB({ currentView, onClick, isTransitioning }) {
+        if (!currentView) return null;
+
+        const isNavigationView = currentView === 'navigation';
+
+        return (
+            <button
+                onClick={onClick}
+                disabled={isTransitioning}
+                className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center md:hidden"
+                style={{
+                    opacity: isTransitioning ? 0.6 : 1,
+                    transform: isTransitioning ? 'scale(0.9)' : 'scale(1)'
+                }}
+                aria-label={isNavigationView ? 'View Escalation Response' : 'View Task Navigation'}
+            >
+                <div className="flex flex-col items-center justify-center">
+                    <svg
+                        className="w-6 h-6"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        {isNavigationView ? (
+                            // Escalation icon (alert triangle)
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                            />
+                        ) : (
+                            // Navigation icon (list)
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M4 6h16M4 12h16M4 18h16"
+                            />
+                        )}
+                    </svg>
+                </div>
+            </button>
+        );
+    }
+
+    // Phase 5: Mobile Context Badge Component
+    function MobileContextBadge({ view, taskName, stepCount }) {
+        if (!view) return null;
+
+        const isNavigationView = view === 'navigation';
+
+        return (
+            <div className="md:hidden sticky top-0 z-40 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 px-4 py-2 shadow-sm">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                        <span className="text-xs font-semibold text-blue-600">
+                            {isNavigationView ? '📋 Task Navigation' : '🚨 Escalation Response'}
+                        </span>
+                        {!isNavigationView && stepCount > 0 && (
+                            <span className="text-xs text-gray-500">
+                                ({stepCount} steps)
+                            </span>
+                        )}
+                    </div>
+                    <span className="text-xs text-gray-400 font-mono">
+                        {taskName ? taskName.substring(0, 20) + '...' : ''}
+                    </span>
+                </div>
+            </div>
+        );
+    }
+
     // Main App Component
     function WaitApprovalApp() {
         const [loading, setLoading] = useState(true);
@@ -3663,11 +3784,17 @@
         });
         const [isResizing, setIsResizing] = useState(false);
         const [isMobile, setIsMobile] = useState(false);
-        
+
+        // Mobile view management (Phase 2: State Management)
+        const [mobileView, setMobileView] = useState('escalation'); // 'escalation' | 'navigation'
+        const [showMobileToggle, setShowMobileToggle] = useState(false);
+        const [mobileViewTransition, setMobileViewTransition] = useState(false);
+
         // Constants for resize constraints
         const MIN_PANEL_WIDTH = 280;
         const MAX_PANEL_WIDTH = 600;
         const DEFAULT_WIDTH = 320;
+        const MOBILE_VIEW_KEY = 'escalation_v3_mobile_view_preference';
 
         useEffect(() => {
             initializeApp();
@@ -3682,7 +3809,39 @@
             window.addEventListener('resize', checkMobile);
             return () => window.removeEventListener('resize', checkMobile);
         }, []);
-        
+
+        // Mobile view state initialization (Phase 2: State Management)
+        useEffect(() => {
+            if (isMobile) {
+                // Load saved preference or default to escalation
+                const savedView = localStorage.getItem(MOBILE_VIEW_KEY) || 'escalation';
+                setMobileView(savedView);
+                setShowMobileToggle(true);
+            } else {
+                setShowMobileToggle(false);
+                setMobileView('escalation'); // Reset on desktop
+            }
+        }, [isMobile]);
+
+        // Mobile view toggle handler (Phase 2: State Management)
+        const handleMobileViewToggle = () => {
+            if (!isMobile) return; // Safety check - desktop safeguard
+
+            setMobileViewTransition(true);
+
+            // Toggle between views
+            const newView = mobileView === 'escalation' ? 'navigation' : 'escalation';
+            setMobileView(newView);
+
+            // Persist preference
+            localStorage.setItem(MOBILE_VIEW_KEY, newView);
+
+            // Clear transition flag after animation completes
+            setTimeout(() => {
+                setMobileViewTransition(false);
+            }, 300);
+        };
+
         // Mouse event handlers for resizing
         useEffect(() => {
             if (!isResizing) return;
@@ -3734,12 +3893,47 @@
                     document.body.style.cursor = '';
                 }
             };
-            
+
             if (isResizing) {
                 document.addEventListener('keydown', handleKeyDown);
                 return () => document.removeEventListener('keydown', handleKeyDown);
             }
         }, [isResizing]);
+
+        // Phase 8: Desktop layout verification (safeguard against regressions)
+        useEffect(() => {
+            if (!isMobile) {
+                // Verify desktop layout components are present
+                setTimeout(() => {
+                    const leftPanel = document.querySelector('.flex-shrink-0.relative');
+                    const rightPanel = document.querySelector('.flex-1.overflow-y-auto');
+
+                    if (!leftPanel || !rightPanel) {
+                        console.error('❌ [DESKTOP SAFEGUARD] Layout components missing!', {
+                            leftPanel: !!leftPanel,
+                            rightPanel: !!rightPanel,
+                            isMobile,
+                            mobileView
+                        });
+                    } else {
+                        // Verify both panels are visible on desktop
+                        const leftVisible = window.getComputedStyle(leftPanel).display !== 'none';
+                        const rightVisible = window.getComputedStyle(rightPanel).display !== 'none';
+
+                        if (!leftVisible || !rightVisible) {
+                            console.error('❌ [DESKTOP SAFEGUARD] Panels hidden on desktop!', {
+                                leftVisible,
+                                rightVisible,
+                                isMobile,
+                                mobileView
+                            });
+                        } else {
+                            console.log('✅ [DESKTOP SAFEGUARD] Desktop layout verified');
+                        }
+                    }
+                }, 100); // Small delay to let DOM render
+            }
+        }, [isMobile, mobileView]);
 
         async function initializeApp() {
             try {
@@ -3844,23 +4038,36 @@
                 )}
                 
                 <div className="flex h-screen relative">
-                    {/* Left Panel with dynamic width */}
-                    <div 
-                        style={{ 
+                    {/* Phase 4: Left Panel - Task Navigation with mobile conditional rendering */}
+                    <div
+                        style={{
                             width: isMobile ? '100%' : `${leftPanelWidth}px`,
-                            minWidth: `${MIN_PANEL_WIDTH}px`,
-                            maxWidth: `${MAX_PANEL_WIDTH}px`,
+                            minWidth: isMobile ? 'auto' : `${MIN_PANEL_WIDTH}px`,
+                            maxWidth: isMobile ? 'none' : `${MAX_PANEL_WIDTH}px`,
                             transition: isResizing ? 'none' : 'width 0.2s ease-out'
                         }}
-                        className="flex-shrink-0 relative"
+                        className={`
+                            flex-shrink-0 relative
+                            ${isMobile ? (mobileView === 'navigation' ? 'block' : 'hidden') : 'block'}
+                            ${mobileViewTransition ? 'transition-opacity duration-300' : ''}
+                        `}
                     >
-                        <MainTaskPanel 
+                        {/* Phase 5: Mobile Context Badge for Navigation */}
+                        {isMobile && mobileView === 'navigation' && (
+                            <MobileContextBadge
+                                view={mobileView}
+                                taskName={mainTask?.name}
+                                stepCount={subtasks?.length || 0}
+                            />
+                        )}
+
+                        <MainTaskPanel
                             parentTask={parentTask}
-                            mainTask={mainTask} 
+                            mainTask={mainTask}
                             subtasks={subtasks}
                             selectedStepId={selectedStepId}
                             onStepSelect={setSelectedStepId}
-                            panelWidth={leftPanelWidth}
+                            panelWidth={isMobile ? window.innerWidth : leftPanelWidth}
                         />
                     </div>
                     
@@ -3879,8 +4086,23 @@
                         />
                     )}
                     
-                    {/* Main Content Area - Hidden on mobile to give full width to panel */}
-                    <div className={`flex-1 overflow-y-auto min-w-0 ${isMobile ? 'hidden md:block' : ''}`}>
+                    {/* Phase 4: Right Panel - Escalation Content with mobile conditional rendering */}
+                    <div
+                        className={`
+                            flex-1 overflow-y-auto min-w-0
+                            ${isMobile ? (mobileView === 'escalation' ? 'block' : 'hidden') : 'block'}
+                            ${mobileViewTransition ? 'transition-opacity duration-300' : ''}
+                        `}
+                    >
+                        {/* Phase 5: Mobile Context Badge for Escalation */}
+                        {isMobile && mobileView === 'escalation' && (
+                            <MobileContextBadge
+                                view={mobileView}
+                                taskName={taskData?.name}
+                                stepCount={subtasks?.length || 0}
+                            />
+                        )}
+
                         <div className="bg-white shadow-lg">
                             {/* Header */}
                             <div className="bg-white border-b border-gray-200 p-6">
@@ -4001,6 +4223,15 @@
                             </div>
                         </div>
                     </div>
+
+                    {/* Phase 3: Mobile Toggle FAB */}
+                    {showMobileToggle && (
+                        <MobileViewToggleFAB
+                            currentView={mobileView}
+                            onClick={handleMobileViewToggle}
+                            isTransitioning={mobileViewTransition}
+                        />
+                    )}
                 </div>
             </div>
         );
