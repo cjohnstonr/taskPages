@@ -1098,34 +1098,6 @@
             }
         };
 
-        const handleReopenEscalation = async () => {
-            if (!confirm('Are you sure you want to reopen this escalation? This will change the status back to "Not Escalated" so it can be resubmitted.')) {
-                return;
-            }
-
-            setIsSubmitting(true);
-            try {
-                const response = await fetch(`${BACKEND_URL}/api/task-helper/reopen-escalation/${task.id}`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-
-                if (response.ok) {
-                    alert('✅ Escalation reopened successfully! Status changed to "Not Escalated".');
-                    setTimeout(() => window.location.reload(), 1000);
-                } else {
-                    const errorData = await response.json();
-                    alert(`Failed to reopen escalation: ${errorData.error || 'Unknown error'}`);
-                }
-            } catch (error) {
-                console.error('Error reopening escalation:', error);
-                alert('Error reopening escalation');
-            } finally {
-                setIsSubmitting(false);
-            }
-        };
-
         return (
             <div className="bg-red-50 border-2 border-red-600 rounded-lg p-6">
                 {/* Escalation Context Display */}
@@ -1730,6 +1702,35 @@
             } catch (error) {
                 console.error('Error submitting escalation:', error);
                 alert('Error submitting escalation');
+            } finally {
+                setIsSubmitting(false);
+            }
+        };
+
+        // Reopen escalation (change status back to Not Escalated)
+        const handleReopenEscalation = async () => {
+            if (!confirm('Are you sure you want to reopen this escalation? This will change the status back to "Not Escalated" so it can be resubmitted.')) {
+                return;
+            }
+
+            setIsSubmitting(true);
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/task-helper/reopen-escalation/${task.id}`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (response.ok) {
+                    alert('✅ Escalation reopened successfully! Status changed to "Not Escalated".');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    const errorData = await response.json();
+                    alert(`Failed to reopen escalation: ${errorData.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error reopening escalation:', error);
+                alert('Error reopening escalation');
             } finally {
                 setIsSubmitting(false);
             }
