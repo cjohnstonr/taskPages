@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## [2025-12-02] - Type: UI/Bug Fix
+- Change: Fixed ReferenceError for handleReopenEscalation function scope issue
+- Files: backend/templates/secured/escalationv3.html
+- State impact: None - function definition moved to correct component
+- Field mutations: None
+- Performance: No impact
+- Issue: Function defined in SupervisorActionPanel but called from EscalationModule
+- Resolution: Moved handleReopenEscalation to EscalationModule where it's used, removed duplicate
+
 ## [2025-12-02] - Type: UI/Mobile Enhancement
 - Change: Implemented mobile-first responsive design for escalation-v3 with view toggle functionality
 - Files: backend/templates/secured/escalationv3.html
