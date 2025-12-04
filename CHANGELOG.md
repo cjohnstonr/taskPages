@@ -1,5 +1,52 @@
 # CHANGELOG
 
+## [2025-12-02] - Type: UI/Feature
+- Change: Implemented mobile-friendly escalation dashboard with filtering and navigation
+- Files: backend/app_secure.py (lines 1455-1611, 3277-3290), backend/templates/secured/escalations.html
+- State impact: None - new page with independent state management
+- Field mutations: None - read-only API endpoint
+- Performance: API endpoint queries ClickUp workspace tags (typical response <2s for 50 tasks)
+
+**Feature Overview**:
+- New dashboard at `/pages/escalations` for viewing all escalated tasks
+- Mobile-first card layout with filtering by status (Active/Resolved) and level (Shirley/Christian)
+- Stats overview showing active, resolved, level 1, and level 2 counts
+- Click-through navigation to individual escalation detail pages (escalation-v3)
+
+**Backend API Endpoint**:
+- Route: `GET /api/task-helper/escalations`
+- Query params: `status` (active|resolved|all), `level` (0|1|all), `limit`, `offset`
+- Queries ClickUp API: `GET /team/{workspace_id}/task?tags[]=escalated`
+- Helper function: `get_custom_field()` for parsing dropdown/date/text fields
+- Filtering: Excludes status=0 (Not Escalated), applies status/level filters
+- Stats calculation: Counts by status (active/resolved) and level (1/2)
+- Pagination: Returns limited subset with total counts
+- Response format: JSON with escalations array, stats object, total/filtered counts
+
+**Frontend Components**:
+- `EscalationDashboard`: Main container with state management
+- `FilterBar`: Dropdown filters for status and level
+- `StatsBar`: 4-metric stats cards (active, resolved, level_1, level_2)
+- `EscalationList`: Grid layout (1 col mobile, 2 cols tablet+)
+- `EscalationCard`: Individual task cards with badges, metadata, actions
+- `LoadingState`, `ErrorState`, `EmptyState`: User feedback components
+
+**Mobile-First Design**:
+- Card stack on mobile (100% width)
+- 2-column grid on tablet (≥768px)
+- Status badges: Purple for escalated, yellow for resolved
+- Level badges: Pink for Shirley, indigo for Christian
+- Time ago format: "2h ago", "3d ago"
+- Priority labels: Urgent, High, Normal, Low
+- Action buttons: "View Details" (purple primary), "ClickUp ↗" (gray secondary)
+
+**Custom Field IDs Used**:
+- ESCALATION_STATUS: `8d784bd0-18e5-4db3-b45e-9a2900262e04` (0=Not, 1=Escalated, 2=Resolved)
+- ESCLATION_LEVEL: `90d2fec8-7474-4221-84c0-b8c7fb5e4385` (0=Shirley, 1=Christian)
+- ESCALATION_REASON_TEXT: `c6e0281e-9001-42d7-a265-8f5da6b71132`
+- ESCALATION_SUBMITTED_DATE_TIME: `5ffd2b3e-b8dc-4bd0-819a-a3d4c3396a5f`
+- ESCALATION_RESOLVED_DATE_TIME: `c40bf1c4-7d33-4b2b-8765-0784cd88591a`
+
 ## [2025-12-02] - Type: UI/Bug Fix
 - Change: Fixed ReferenceError for handleReopenEscalation function scope issue
 - Files: backend/templates/secured/escalationv3.html

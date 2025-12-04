@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escalation Dashboard</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Loading spinner */
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #7c4dff;
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Truncate text */
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Mobile-first responsive grid */
+        .escalation-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+
+        @media (min-width: 768px) {
+            .escalation-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .escalation-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const BACKEND_URL = window.location.origin;
+
+        function EscalationDashboard() {
+            const [escalations, setEscalations] = useState([]);
+            const [stats, setStats] = useState({});
+            const [filters, setFilters] = useState({ status: 'active', level: 'all' });
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+
+            // Fetch escalations
+            const fetchEscalations = async () => {
+                setLoading(true);
+                setError(null);
+                try {
+                    const params = new URLSearchParams(filters);
+                    const response = await fetch(
+                        `${BACKEND_URL}/api/task-helper/escalations?${params}`,
+                        { credentials: 'include' }
+                    );
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+                    setEscalations(data.escalations);
+                    setStats(data.stats);
+                } catch (err) {
+                    console.error('Failed to fetch escalations:', err);
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            useEffect(() => {
+                fetchEscalations();
+            }, [filters]);
+
+            return (
+                <div className="container mx-auto p-4 max-w-6xl">
+                    {/* Header */}
+                    <div className="mb-6">
+                        <h1 className="text-3xl font-bold text-gray-800 mb-2">
+                            🚨 Escalation Dashboard
+                        </h1>
+                        <p className="text-gray-600">
+                            View and manage all escalated tasks
+                        </p>
+                    </div>
+
+                    {/* Filter Bar */}
+                    <FilterBar
+                        filters={filters}
+                        setFilters={setFilters}
+                        stats={stats}
+                    />
+
+                    {/* Stats */}
+                    <StatsBar stats={stats} />
+
+                    {/* Escalation List */}
+                    {loading ? (
+                        <LoadingState />
+                    ) : error ? (
+                        <ErrorState message={error} onRetry={fetchEscalations} />
+                    ) : escalations.length === 0 ? (
+                        <EmptyState filters={filters} />
+                    ) : (
+                        <EscalationList escalations={escalations} />
+                    )}
+                </div>
+            );
+        }
+
+        function FilterBar({ filters, setFilters, stats }) {
+            return (
+                <div className="bg-white rounded-lg shadow p-4 mb-4">
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        {/* Status Filter */}
+                        <div className="flex-1">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Status
+                            </label>
+                            <select
+                                value={filters.status}
+                                onChange={(e) => setFilters({...filters, status: e.target.value})}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            >
+                                <option value="active">Active ({stats.active || 0})</option>
+                                <option value="resolved">Resolved ({stats.resolved || 0})</option>
+                                <option value="all">All</option>
+                            </select>
+                        </div>
+
+                        {/* Level Filter */}
+                        <div className="flex-1">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Level
+                            </label>
+                            <select
+                                value={filters.level}
+                                onChange={(e) => setFilters({...filters, level: e.target.value})}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            >
+                                <option value="all">All Levels</option>
+                                <option value="0">Shirley (Level 1) ({stats.level_1 || 0})</option>
+                                <option value="1">Christian (Level 2) ({stats.level_2 || 0})</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function StatsBar({ stats }) {
+            return (
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-4 mb-6">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <StatCard
+                            icon="🟣"
+                            label="Active"
+                            value={stats.active || 0}
+                            color="text-purple-700"
+                        />
+                        <StatCard
+                            icon="✅"
+                            label="Resolved"
+                            value={stats.resolved || 0}
+                            color="text-green-700"
+                        />
+                        <StatCard
+                            icon="👤"
+                            label="Level 1"
+                            value={stats.level_1 || 0}
+                            color="text-pink-700"
+                        />
+                        <StatCard
+                            icon="👥"
+                            label="Level 2"
+                            value={stats.level_2 || 0}
+                            color="text-indigo-700"
+                        />
+                    </div>
+                </div>
+            );
+        }
+
+        function StatCard({ icon, label, value, color }) {
+            return (
+                <div className="text-center">
+                    <div className="text-2xl mb-1">{icon}</div>
+                    <div className={`text-2xl font-bold ${color}`}>{value}</div>
+                    <div className="text-sm text-gray-600">{label}</div>
+                </div>
+            );
+        }
+
+        function EscalationList({ escalations }) {
+            return (
+                <div className="escalation-grid">
+                    {escalations.map(escalation => (
+                        <EscalationCard key={escalation.id} data={escalation} />
+                    ))}
+                </div>
+            );
+        }
+
+        function EscalationCard({ data }) {
+            const statusBadge = data.status === 1 ?
+                { text: 'ESCALATED', color: 'bg-purple-100 text-purple-700' } :
+                { text: 'RESOLVED', color: 'bg-yellow-100 text-yellow-700' };
+
+            const levelBadge = data.level === 0 ?
+                { text: 'SHIRLEY', color: 'text-pink-700' } :
+                { text: 'CHRISTIAN', color: 'text-indigo-700' };
+
+            const timeAgo = data.submitted_time ?
+                formatTimeAgo(parseInt(data.submitted_time)) : 'Unknown';
+
+            const priorityLabel = getPriorityLabel(data.priority);
+
+            return (
+                <div className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow p-4 sm:p-6">
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`px-2 py-1 rounded text-xs font-semibold ${statusBadge.color}`}>
+                                {statusBadge.text}
+                            </span>
+                            <span className={`text-sm font-semibold ${levelBadge.color}`}>
+                                {levelBadge.text}
+                            </span>
+                        </div>
+                        <span className="text-sm text-gray-500">{timeAgo}</span>
+                    </div>
+
+                    {/* Task ID */}
+                    {data.custom_id && (
+                        <div className="text-xs font-mono text-gray-500 mb-2">
+                            {data.custom_id}
+                        </div>
+                    )}
+
+                    {/* Task Name */}
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                        {data.name}
+                    </h3>
+
+                    {/* Reason Preview */}
+                    {data.escalation_reason && (
+                        <div className="bg-gray-50 rounded p-3 mb-3">
+                            <p className="text-sm text-gray-700 line-clamp-2">
+                                📝 {data.escalation_reason}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Metadata */}
+                    <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-4">
+                        {data.due_date && (
+                            <div>
+                                📅 Due: {formatDate(data.due_date)}
+                            </div>
+                        )}
+                        {priorityLabel && (
+                            <div>
+                                ⚡ {priorityLabel}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2">
+                        <a
+                            href={data.url}
+                            className="flex-1 bg-purple-600 text-white text-center py-2 rounded-md hover:bg-purple-700 transition-colors font-medium"
+                        >
+                            View Details
+                        </a>
+                        <a
+                            href={data.clickup_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+                        >
+                            ClickUp ↗
+                        </a>
+                    </div>
+                </div>
+            );
+        }
+
+        function LoadingState() {
+            return (
+                <div className="text-center py-12">
+                    <div className="spinner mb-4"></div>
+                    <p className="text-gray-600">Loading escalations...</p>
+                </div>
+            );
+        }
+
+        function ErrorState({ message, onRetry }) {
+            return (
+                <div className="bg-red-50 rounded-lg p-6 text-center">
+                    <div className="text-4xl mb-4">⚠️</div>
+                    <h3 className="text-lg font-semibold text-red-900 mb-2">
+                        Error Loading Escalations
+                    </h3>
+                    <p className="text-red-700 mb-4">{message}</p>
+                    <button
+                        onClick={onRetry}
+                        className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
+                    >
+                        Retry
+                    </button>
+                </div>
+            );
+        }
+
+        function EmptyState({ filters }) {
+            const message = filters.status === 'active'
+                ? "No active escalations - all clear! 🎉"
+                : "No escalations found with current filters";
+
+            return (
+                <div className="bg-gray-50 rounded-lg p-12 text-center">
+                    <div className="text-6xl mb-4">✨</div>
+                    <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                        {message}
+                    </h3>
+                </div>
+            );
+        }
+
+        // Helper functions
+        function formatTimeAgo(timestamp) {
+            const now = Date.now();
+            const diff = now - timestamp;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+
+            if (minutes < 1) return 'Just now';
+            if (minutes < 60) return `${minutes}m ago`;
+            if (hours < 24) return `${hours}h ago`;
+            return `${days}d ago`;
+        }
+
+        function formatDate(timestamp) {
+            if (!timestamp) return 'N/A';
+            try {
+                const date = new Date(parseInt(timestamp));
+                return date.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+                });
+            } catch (e) {
+                return 'Invalid date';
+            }
+        }
+
+        function getPriorityLabel(priorityId) {
+            const priorities = {
+                '1': 'Urgent',
+                '2': 'High',
+                '3': 'Normal',
+                '4': 'Low'
+            };
+            return priorities[String(priorityId)] || null;
+        }
+
+        // Render app
+        ReactDOM.render(<EscalationDashboard />, document.getElementById('root'));
+    </script>
+</body>
+</html>

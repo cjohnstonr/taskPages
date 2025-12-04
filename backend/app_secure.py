@@ -1452,6 +1452,165 @@ This escalation can now be resubmitted if needed.
         return jsonify({"error": f"Failed to reopen escalation: {str(e)}"}), 500
 
 
+@app.route('/api/task-helper/escalations', methods=['GET'])
+@login_required
+@rate_limiter.rate_limit(limit='30 per minute')
+def get_escalations():
+    """
+    Get filtered list of escalated tasks for the escalation dashboard.
+    Query params: status, level, limit, offset
+
+    Returns all tasks with the 'escalated' tag, filtered by status and level.
+    """
+    try:
+        # Get query params
+        status_filter = request.args.get('status', 'active')  # active|resolved|all
+        level_filter = request.args.get('level', 'all')  # 0|1|all
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+
+        # Get ClickUp API configuration
+        clickup_token = os.getenv('CLICKUP_API_KEY')
+        if not clickup_token:
+            logger.error("ClickUp API key not configured")
+            return jsonify({"error": "ClickUp integration not configured"}), 500
+
+        # Custom field IDs from the plan document
+        FIELD_IDS = {
+            'ESCALATION_STATUS': '8d784bd0-18e5-4db3-b45e-9a2900262e04',
+            'ESCLATION_LEVEL': '90d2fec8-7474-4221-84c0-b8c7fb5e4385',  # Note: typo is in ClickUp
+            'ESCALATION_REASON_TEXT': 'c6e0281e-9001-42d7-a265-8f5da6b71132',
+            'ESCALATION_SUBMITTED_DATE_TIME': '5ffd2b3e-b8dc-4bd0-819a-a3d4c3396a5f',
+            'ESCALATION_RESOLVED_DATE_TIME': 'c40bf1c4-7d33-4b2b-8765-0784cd88591a'
+        }
+
+        # Query ClickUp API for all tasks with 'escalated' tag
+        headers = {
+            'Authorization': clickup_token,
+            'Content-Type': 'application/json'
+        }
+
+        workspace_id = CLICKUP_TEAM_ID
+        url = f'https://api.clickup.com/api/v2/team/{workspace_id}/task'
+        params = {
+            'tags[]': 'escalated',
+            'include_closed': 'true',
+            'subtasks': 'true'
+        }
+
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        tasks = response.json().get('tasks', [])
+
+        logger.info(f"Retrieved {len(tasks)} tasks with 'escalated' tag")
+
+        # Helper function to extract custom field values
+        def get_custom_field(task, field_id):
+            """Extract custom field value, handling dropdowns as integers."""
+            field = next((f for f in task.get('custom_fields', [])
+                          if f['id'] == field_id), None)
+
+            if not field or field.get('value') is None:
+                return None
+
+            # Dropdown fields return integers
+            if field.get('type') == 'drop_down':
+                try:
+                    return int(field['value'])
+                except (ValueError, TypeError):
+                    return None
+
+            # Date fields return strings that need parseInt
+            if field.get('type') == 'date':
+                try:
+                    return int(field['value'])
+                except (ValueError, TypeError):
+                    return None
+
+            # Text fields
+            return field['value']
+
+        # Transform and filter tasks
+        escalations = []
+        for task in tasks:
+            # Parse custom fields
+            status = get_custom_field(task, FIELD_IDS['ESCALATION_STATUS'])
+            level = get_custom_field(task, FIELD_IDS['ESCLATION_LEVEL'])
+
+            # Skip "Not Escalated" (status = 0) - these shouldn't have the tag but filter anyway
+            if status == 0:
+                continue
+
+            # Apply status filter
+            if status_filter == 'active' and status != 1:
+                continue
+            if status_filter == 'resolved' and status != 2:
+                continue
+
+            # Apply level filter
+            if level_filter != 'all':
+                try:
+                    level_filter_int = int(level_filter)
+                    if level != level_filter_int:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+
+            # Extract timestamps
+            submitted_time = get_custom_field(task, FIELD_IDS['ESCALATION_SUBMITTED_DATE_TIME'])
+            resolved_time = get_custom_field(task, FIELD_IDS['ESCALATION_RESOLVED_DATE_TIME'])
+
+            # Transform to simplified structure
+            escalation = {
+                'id': task['id'],
+                'custom_id': task.get('custom_id'),
+                'name': task['name'],
+                'status': status if status is not None else 0,
+                'level': level if level is not None else 0,
+                'escalation_reason': get_custom_field(task, FIELD_IDS['ESCALATION_REASON_TEXT']),
+                'submitted_time': submitted_time,
+                'resolved_time': resolved_time,
+                'due_date': task.get('due_date'),
+                'priority': task.get('priority', {}).get('id') if isinstance(task.get('priority'), dict) else None,
+                'url': f"/pages/escalation-v3?task_id={task.get('custom_id') or task['id']}",
+                'clickup_url': task.get('url')
+            }
+
+            escalations.append(escalation)
+
+        # Calculate stats
+        stats = {
+            'active': len([e for e in escalations if e['status'] == 1]),
+            'resolved': len([e for e in escalations if e['status'] == 2]),
+            'level_1': len([e for e in escalations if e['level'] == 0]),
+            'level_2': len([e for e in escalations if e['level'] == 1])
+        }
+
+        # Sort by submitted time (most recent first)
+        escalations.sort(key=lambda e: e['submitted_time'] or 0, reverse=True)
+
+        # Apply pagination
+        total = len(escalations)
+        escalations_page = escalations[offset:offset + limit]
+
+        logger.info(f"Returning {len(escalations_page)} escalations (filtered from {total} total)")
+
+        return jsonify({
+            'success': True,
+            'escalations': escalations_page,
+            'total': total,
+            'filtered': len(escalations_page),
+            'stats': stats
+        })
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"ClickUp API request failed: {e}")
+        return jsonify({'error': 'Failed to communicate with ClickUp API'}), 500
+    except Exception as e:
+        logger.error(f"Error fetching escalations: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/task-helper/request-info/<task_id>', methods=['POST'])
 @login_required
 @rate_limiter.rate_limit(limit='10 per minute')
@@ -3113,6 +3272,22 @@ def serve_escalation_v3():
 
     # Render the template - query parameters are automatically available in the template
     return render_template('secured/escalationv3.html')
+
+
+@app.route('/pages/escalations')
+@login_required
+@rate_limiter.rate_limit(limit='100 per hour')
+def serve_escalations_dashboard():
+    """
+    Serve escalation dashboard page showing all escalated tasks.
+    Mobile-friendly list view with filtering by status and level.
+    Allows users to navigate to individual escalation detail pages.
+    """
+    # Log page access for security audit
+    logger.info(f"Secure page access: escalations dashboard by {request.user.get('email')}")
+
+    # Render the template
+    return render_template('secured/escalations.html')
 
 
 @app.route('/pages/wait-node-editable')
