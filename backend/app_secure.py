@@ -1551,7 +1551,11 @@ def get_escalations():
             if level_filter != 'all':
                 try:
                     level_filter_int = int(level_filter)
-                    if level != level_filter_int:
+                    # Normalize level: treat None as 0 (Shirley/Level 1)
+                    # This matches the transformation logic and ensures tasks without
+                    # Esclation_Level field set are treated as Level 1 (Shirley)
+                    normalized_level = level if level is not None else 0
+                    if normalized_level != level_filter_int:
                         continue
                 except (ValueError, TypeError):
                     pass

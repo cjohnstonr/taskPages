@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## [2025-12-02] - Type: UI Enhancement
+- Change: Added dashboard navigation button to escalation-v3 header
+- Files: backend/templates/secured/escalationv3.html (line 4114-4126)
+- State impact: None
+- Field mutations: None
+- Performance: No impact
+- Feature: Purple "All Escalations" button in header opens dashboard in new tab
+- Mobile: Shows "Dashboard" text on mobile, "All Escalations" on desktop
+- Location: Top-right of escalation response header, next to page title
+- Styling: Matches escalation theme (purple bg-purple-600), responsive sizing
+
+## [2025-12-02] - Type: Bug Fix
+- Change: Fixed escalation level filtering to handle tasks without Esclation_Level field set
+- Files: backend/app_secure.py (lines 1557)
+- State impact: None
+- Field mutations: None
+- Performance: No impact
+- Issue: Tasks with Esclation_Level=None were skipped when filtering by "Shirley (Level 1)"
+- Root Cause: Filtering logic compared `None != 0` → True, but transformation converted `None → 0`
+- Resolution: Normalize level to 0 during filtering if None, matching transformation and stats logic
+- Behavior: Tasks showing status "Escalated" (without explicit level) now correctly appear in Shirley filter
+
 ## [2025-12-02] - Type: UI/Feature
 - Change: Implemented mobile-friendly escalation dashboard with filtering and navigation
 - Files: backend/app_secure.py (lines 1455-1611, 3277-3290), backend/templates/secured/escalations.html
