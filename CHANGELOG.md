@@ -1,5 +1,51 @@
 # CHANGELOG
 
+## [2025-12-09] - Type: UI
+
+- Change: Add test administration page for ClickUp-based testing
+- Files: backend/app_secure.py (lines 2324-2527, 3532-3546), backend/templates/secured/test-administration.html
+- State impact: None (read-only from ClickUp, writes only to user_input field)
+- Field mutations: user_input field (1542be38-e716-4ae2-9513-25b5aa0c076a) - write only
+- Performance: Parallel subtask fetching via ThreadPoolExecutor, typical load time <3s for 40 questions
+
+### Details
+**Backend Implementation**:
+- Added `parse_mc_options()` helper function to extract A/B/C/D options from question text using regex
+- Added `/api/test/initialize/<task_id>` endpoint to fetch test task and all question subtasks with custom fields
+- Added `/api/test/submit-answer/<question_id>` endpoint to save user answers via custom field updates
+- Added `/pages/test/<task_id>` route to serve test administration page
+- Uses existing `ClickUpService.fetch_subtasks_with_details()` for parallel question fetching
+- Supports only 2 question types: Multiple Choice (0) and Short Answer (1)
+- No grading functionality - answer submission only
+
+**Frontend Implementation**:
+- Created `test-administration.html` React template with CDN-based React 18
+- Displays questions in sequential order with progress tracking
+- Multiple choice questions: Radio buttons with full option text (letter + text)
+- Short answer questions: Multi-line textarea for free-form responses
+- Real-time save status indicators (Saved/Not Saved badges)
+- Progress bar showing completion percentage
+- Mobile-responsive design with Tailwind CSS
+- Completion confirmation when all questions answered
+
+**Custom Field IDs** (Test Questions):
+- QUESTION_TYPE: `6ecb4043-f8f7-46d2-8825-33d73bb1d1d0` (dropdown: 0=MC, 1=SA)
+- QUESTION_TEXT: `9a2cf78e-4c75-49f4-ac5e-cff324691c09` (text: full question + options)
+- QUESTION_ANSWER: `f381c7bc-4677-4b3d-945d-a71d37d279e2` (text: correct answer, not shown to user)
+- ANSWER_RATIONALE: `39618fa8-0e13-4669-b9c8-f9a1f1fd55b7` (text: explanation, not shown to user)
+- USER_INPUT: `1542be38-e716-4ae2-9513-25b5aa0c076a` (short_text: user's answer)
+
+**Security**:
+- All routes protected with `@login_required` decorator
+- Rate limiting: 30 req/min for initialize, 60 req/min for submit
+- User email logged for audit trail
+- OAuth 2.0 authentication required
+
+**Usage**:
+- Access test via: `https://taskpages-backend.onrender.com/pages/test/<task_id>`
+- Task ID from URL path (e.g., `/pages/test/868gne5g9`)
+- Any authenticated user can take any test (no role restrictions)
+
 ## [2025-12-02] - Type: UI Enhancement
 - Change: Added dashboard navigation button to escalation-v3 header
 - Files: backend/templates/secured/escalationv3.html (line 4114-4126)

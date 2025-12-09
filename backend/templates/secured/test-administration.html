@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Administration</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #10b981;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .question-card {
+            transition: all 0.2s ease-in-out;
+        }
+
+        .question-card:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .radio-option:hover {
+            background-color: #f9fafb;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+    {% raw %}
+    const { useState, useEffect, useCallback } = React;
+
+    const BACKEND_URL = 'https://taskpages-backend.onrender.com';
+
+    // Get task_id from URL path (/pages/test/<task_id>)
+    const pathParts = window.location.pathname.split('/');
+    const TEST_ID = pathParts[pathParts.length - 1];
+
+    // Question type mappings
+    const QUESTION_TYPES = {
+        0: 'Multiple Choice',
+        1: 'Short Answer'
+    };
+
+    function TestAdministrationApp() {
+        // State management
+        const [loading, setLoading] = useState(true);
+        const [testData, setTestData] = useState(null);
+        const [questions, setQuestions] = useState([]);
+        const [answers, setAnswers] = useState({});
+        const [submittingAnswers, setSubmittingAnswers] = useState({});
+        const [savedAnswers, setSavedAnswers] = useState({});
+        const [error, setError] = useState(null);
+
+        // Load test data on mount
+        useEffect(() => {
+            if (!TEST_ID) {
+                setError('No test ID provided in URL. Please provide a task_id parameter.');
+                setLoading(false);
+                return;
+            }
+            fetchTestData();
+        }, []);
+
+        const fetchTestData = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+                const response = await fetch(`${BACKEND_URL}/api/test/initialize/${TEST_ID}`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                if (data.error) {
+                    setError(data.error);
+                    return;
+                }
+
+                setTestData(data.test_task);
+                setQuestions(data.questions || []);
+
+                // Pre-populate existing answers
+                const existingAnswers = {};
+                const saved = {};
+                data.questions.forEach(q => {
+                    if (q.user_input) {
+                        existingAnswers[q.id] = q.user_input;
+                        saved[q.id] = true;
+                    }
+                });
+                setAnswers(existingAnswers);
+                setSavedAnswers(saved);
+
+                setLoading(false);
+            } catch (error) {
+                console.error('Error fetching test data:', error);
+                setError(`Failed to load test: ${error.message}`);
+                setLoading(false);
+            }
+        };
+
+        const handleAnswerChange = (questionId, value) => {
+            setAnswers(prev => ({
+                ...prev,
+                [questionId]: value
+            }));
+            // Mark as not saved when changed
+            setSavedAnswers(prev => ({
+                ...prev,
+                [questionId]: false
+            }));
+        };
+
+        const submitAnswer = async (questionId) => {
+            try {
+                setSubmittingAnswers(prev => ({ ...prev, [questionId]: true }));
+
+                const response = await fetch(
+                    `${BACKEND_URL}/api/test/submit-answer/${questionId}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_input: answers[questionId] })
+                    }
+                );
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    setSavedAnswers(prev => ({
+                        ...prev,
+                        [questionId]: true
+                    }));
+                } else {
+                    alert(`Error: ${result.error || 'Failed to save answer'}`);
+                }
+            } catch (error) {
+                console.error('Error submitting answer:', error);
+                alert(`Failed to save answer: ${error.message}`);
+            } finally {
+                setSubmittingAnswers(prev => ({ ...prev, [questionId]: false }));
+            }
+        };
+
+        const renderQuestion = (question) => {
+            const questionType = QUESTION_TYPES[question.question_type] || 'Unknown';
+            const hasAnswer = answers[question.id] && answers[question.id].trim().length > 0;
+            const isSaved = savedAnswers[question.id];
+            const isSubmitting = submittingAnswers[question.id];
+
+            return (
+                <div key={question.id} className="bg-white rounded-lg shadow-md p-6 mb-4 question-card">
+                    <div className="mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-lg font-semibold text-gray-800">
+                                {question.name}
+                            </h3>
+                            <div className="flex items-center space-x-2">
+                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                    {questionType}
+                                </span>
+                                {isSaved && (
+                                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded flex items-center">
+                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+                                        </svg>
+                                        Saved
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                        <p className="text-gray-700 whitespace-pre-wrap">
+                            {question.question_type === 0
+                                ? question.question_text.split(/\s+A\.\s+/)[0].trim()
+                                : question.question_text
+                            }
+                        </p>
+                    </div>
+
+                    {/* Multiple Choice Options */}
+                    {question.question_type === 0 && (
+                        <div className="space-y-2">
+                            {question.options.map(option => (
+                                <label key={option.letter} className="flex items-start space-x-3 cursor-pointer p-3 rounded-md radio-option border border-gray-200">
+                                    <input
+                                        type="radio"
+                                        name={`question_${question.id}`}
+                                        value={option.letter}
+                                        checked={answers[question.id] === option.letter}
+                                        onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+                                        className="form-radio h-5 w-5 text-blue-600 mt-0.5"
+                                    />
+                                    <span className="text-sm flex-1">
+                                        <strong className="text-blue-600">{option.letter}.</strong> {option.text}
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Short Answer Input */}
+                    {question.question_type === 1 && (
+                        <textarea
+                            value={answers[question.id] || ''}
+                            onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+                            placeholder="Enter your answer here..."
+                            rows="6"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                    )}
+
+                    <div className="mt-4 flex items-center justify-between">
+                        <button
+                            onClick={() => submitAnswer(question.id)}
+                            disabled={!hasAnswer || isSubmitting || isSaved}
+                            className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+                        >
+                            {isSubmitting ? (
+                                <>
+                                    <div className="spinner mr-2"></div>
+                                    Saving...
+                                </>
+                            ) : isSaved ? (
+                                <>
+                                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+                                    </svg>
+                                    Saved
+                                </>
+                            ) : (
+                                'Save Answer'
+                            )}
+                        </button>
+                        {!isSaved && hasAnswer && (
+                            <span className="text-xs text-gray-500">
+                                Click "Save Answer" to save your response
+                            </span>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        if (loading) {
+            return (
+                <div className="flex items-center justify-center min-h-screen">
+                    <div className="text-center">
+                        <div className="spinner mx-auto mb-4"></div>
+                        <span className="text-gray-600">Loading test...</span>
+                    </div>
+                </div>
+            );
+        }
+
+        if (error) {
+            return (
+                <div className="flex items-center justify-center min-h-screen">
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
+                        <h2 className="text-red-800 font-semibold text-lg mb-2">Error Loading Test</h2>
+                        <p className="text-red-700">{error}</p>
+                        <button
+                            onClick={fetchTestData}
+                            className="mt-4 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        const completedCount = Object.keys(savedAnswers).filter(key => savedAnswers[key]).length;
+        const totalCount = questions.length;
+
+        return (
+            <div className="container mx-auto px-4 py-8 max-w-4xl">
+                {/* Header */}
+                <div className="mb-8">
+                    <h1 className="text-3xl font-bold text-gray-800 mb-2">
+                        {testData?.name || 'Test'}
+                    </h1>
+                    <div className="flex items-center space-x-4 text-sm text-gray-600">
+                        <span className="flex items-center">
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                            Total Questions: {totalCount}
+                        </span>
+                        <span className="flex items-center">
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Saved: {completedCount}
+                        </span>
+                    </div>
+                    {completedCount > 0 && (
+                        <div className="mt-3">
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div
+                                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${(completedCount / totalCount) * 100}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Questions */}
+                <div className="space-y-6">
+                    {questions.map(renderQuestion)}
+                </div>
+
+                {/* Footer */}
+                {completedCount === totalCount && (
+                    <div className="mt-8 bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                        <svg className="w-12 h-12 mx-auto text-green-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <h3 className="text-green-800 font-semibold text-lg mb-2">All Questions Saved!</h3>
+                        <p className="text-green-700">You have saved answers to all {totalCount} questions.</p>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<TestAdministrationApp />);
+    {% endraw %}
+    </script>
+</body>
+</html>

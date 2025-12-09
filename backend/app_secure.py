@@ -2321,6 +2321,211 @@ SITE_VISIT_CUSTOM_FIELDS = {
 }
 
 
+# ============================================================================
+# TEST ADMINISTRATION ENDPOINTS
+# ============================================================================
+
+def parse_mc_options(question_text: str) -> List[Dict[str, str]]:
+    """
+    Parse multiple choice options from question text.
+
+    Expected format:
+    "Question text here? A. First option B. Second option C. Third option D. Fourth option"
+
+    Returns:
+    [
+        {"letter": "A", "text": "First option"},
+        {"letter": "B", "text": "Second option"},
+        {"letter": "C", "text": "Third option"},
+        {"letter": "D", "text": "Fourth option"}
+    ]
+    """
+    import re
+
+    options = []
+
+    # Split on pattern like " A. " or " B. "
+    # Use lookahead to split before the letter
+    parts = re.split(r'\s+(?=[A-D]\.)', question_text)
+
+    for part in parts:
+        # Match pattern: "A. Option text"
+        match = re.match(r'^([A-D])\.\s+(.+)', part.strip(), re.DOTALL)
+        if match:
+            options.append({
+                'letter': match.group(1),
+                'text': match.group(2).strip()
+            })
+
+    return options
+
+
+@app.route('/api/test/initialize/<task_id>', methods=['GET'])
+@login_required
+@rate_limiter.rate_limit(limit='30 per minute')
+def initialize_test(task_id):
+    """
+    Initialize test page with test data and all questions
+
+    Returns:
+    {
+        "test_task": {task object},
+        "questions": [
+            {
+                "id": "subtask_id",
+                "name": "Q1",
+                "order": 1,
+                "question_type": 0,  // order index (0=MC, 1=SA)
+                "question_text": "Full question text",
+                "options": [{"letter": "A", "text": "..."}, ...],  // MC only
+                "user_input": "previous answer or null"
+            },
+            ...
+        ],
+        "user_email": "user@example.com",
+        "test_metadata": {
+            "total_questions": 10,
+            "completed_questions": 3,
+            "test_name": "Task name"
+        }
+    }
+    """
+    try:
+        logger.info(f"Initializing test for task: {task_id} by user: {request.user.get('email')}")
+
+        # Fetch parent task
+        test_task = clickup_service.get_task(task_id, custom_task_ids=True, include_subtasks=True)
+
+        # Fetch all subtasks with custom fields
+        subtasks = clickup_service.fetch_subtasks_with_details(task_id)
+
+        if not subtasks:
+            return jsonify({
+                "error": "No questions found for this test",
+                "test_task": test_task
+            }), 404
+
+        # Parse and structure questions
+        questions = []
+        for idx, subtask in enumerate(subtasks, 1):
+            # Extract custom fields
+            custom_fields_dict = {
+                cf['id']: cf.get('value') for cf in subtask.get('custom_fields', [])
+            }
+
+            # Test custom field IDs
+            FIELD_IDS_TEST = {
+                'QUESTION_TYPE': '6ecb4043-f8f7-46d2-8825-33d73bb1d1d0',
+                'QUESTION_TEXT': '9a2cf78e-4c75-49f4-ac5e-cff324691c09',
+                'QUESTION_ANSWER': 'f381c7bc-4677-4b3d-945d-a71d37d279e2',
+                'ANSWER_RATIONALE': '39618fa8-0e13-4669-b9c8-f9a1f1fd55b7',
+                'USER_INPUT': '1542be38-e716-4ae2-9513-25b5aa0c076a'
+            }
+
+            question_type = custom_fields_dict.get(FIELD_IDS_TEST['QUESTION_TYPE'])  # Returns 0 or 1
+            question_text = custom_fields_dict.get(FIELD_IDS_TEST['QUESTION_TEXT'], '')
+            user_input = custom_fields_dict.get(FIELD_IDS_TEST['USER_INPUT'], '')
+
+            # Parse MC options if question_type == 0
+            options = []
+            if question_type == 0:  # Multiple Choice
+                options = parse_mc_options(question_text)
+
+            question_obj = {
+                "id": subtask['id'],
+                "name": subtask['name'],  # "Q1", "Q2", etc.
+                "order": idx,
+                "question_type": question_type,
+                "question_text": question_text,
+                "options": options,  # Empty for SA, populated for MC
+                "user_input": user_input
+            }
+
+            questions.append(question_obj)
+
+        # Sort by question number (parse from name: Q1, Q2, etc.)
+        def get_question_number(q):
+            try:
+                # Extract number from "Q1", "Q2", etc.
+                return int(q['name'][1:]) if q['name'][1:].isdigit() else 999
+            except:
+                return 999
+
+        questions.sort(key=get_question_number)
+
+        logger.info(f"Successfully initialized test {task_id} with {len(questions)} questions")
+
+        return jsonify({
+            "test_task": test_task,
+            "questions": questions,
+            "user_email": request.user.get('email'),
+            "test_metadata": {
+                "total_questions": len(questions),
+                "completed_questions": sum(1 for q in questions if q['user_input']),
+                "test_name": test_task.get('name', 'Test')
+            }
+        })
+
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            return jsonify({"error": "Test not found"}), 404
+        logger.error(f"ClickUp API error: {e}")
+        return jsonify({"error": "Failed to load test from ClickUp"}), 500
+    except Exception as e:
+        logger.error(f"Error initializing test {task_id}: {e}")
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+@app.route('/api/test/submit-answer/<question_id>', methods=['POST'])
+@login_required
+@rate_limiter.rate_limit(limit='60 per minute')
+def submit_answer(question_id):
+    """
+    Submit user's answer to a question
+
+    Request Body:
+    {
+        "user_input": "A" (for multiple choice) or "text answer" (for short answer)
+    }
+
+    Returns:
+    {
+        "success": true,
+        "question_id": "question_id",
+        "answer_saved": true
+    }
+    """
+    try:
+        data = request.get_json()
+        user_input = data.get('user_input', '').strip()
+
+        if not user_input:
+            return jsonify({"error": "Answer cannot be empty"}), 400
+
+        logger.info(f"Submitting answer for question {question_id} by user {request.user.get('email')}")
+
+        # Update ClickUp custom field
+        USER_INPUT_FIELD_ID = '1542be38-e716-4ae2-9513-25b5aa0c076a'
+        clickup_service.update_custom_field(question_id, USER_INPUT_FIELD_ID, user_input)
+
+        logger.info(f"Successfully saved answer for question {question_id}")
+
+        return jsonify({
+            "success": True,
+            "question_id": question_id,
+            "answer_saved": True
+        })
+
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            return jsonify({"error": "Question not found"}), 404
+        logger.error(f"ClickUp API error submitting answer: {e}")
+        return jsonify({"error": "Failed to save answer to ClickUp"}), 500
+    except Exception as e:
+        logger.error(f"Error submitting answer for question {question_id}: {e}")
+        return jsonify({"error": f"Failed to save answer: {str(e)}"}), 500
+
+
 @app.route('/api/property/<property_id>/field-operations/unplanned', methods=['GET'])
 @login_required
 @rate_limiter.rate_limit(limit='300 per hour')
@@ -3319,9 +3524,26 @@ def serve_task_helper():
     """
     # Log page access for security audit
     logger.info(f"Secure page access: task-helper by {request.user.get('email')}")
-    
+
     # Render the task helper template - query parameters are automatically available
     return render_template('secured/task-helper.html')
+
+
+@app.route('/pages/test/<task_id>')
+@login_required
+@rate_limiter.rate_limit(limit='100 per hour')
+def serve_test_administration(task_id):
+    """
+    Serve test administration page for ClickUp-based tests
+    OAuth protected page for taking tests where each task represents a test
+    and each subtask represents a question with custom fields for metadata
+    """
+    # Log page access for security audit
+    logger.info(f"Secure page access: test-administration (task: {task_id}) by {request.user.get('email')}")
+
+    # Render the test template with task_id passed as query param
+    # The React app will read task_id from URL query parameters
+    return render_template('secured/test-administration.html')
 
 
 @app.route('/pages/wait-node')
