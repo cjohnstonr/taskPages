@@ -41,6 +41,19 @@
         .radio-option:hover {
             background-color: #f9fafb;
         }
+
+        .pulse-warning {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: .5;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -48,7 +61,7 @@
 
     <script type="text/babel">
     {% raw %}
-    const { useState, useEffect, useCallback } = React;
+    const { useState, useEffect, useCallback, useRef } = React;
 
     const BACKEND_URL = window.location.origin;
 
@@ -62,6 +75,16 @@
         1: 'Short Answer'
     };
 
+    // Format milliseconds to MM:SS display
+    const formatTime = (ms) => {
+        if (ms === null || ms === undefined) return '--:--';
+        const totalSeconds = Math.floor(Math.abs(ms) / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        const sign = ms < 0 ? '-' : '';
+        return `${sign}${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    };
+
     function TestAdministrationApp() {
         // State management
         const [loading, setLoading] = useState(true);
@@ -72,6 +95,24 @@
         const [savedAnswers, setSavedAnswers] = useState({});
         const [error, setError] = useState(null);
 
+        // Timer state
+        const [testStarted, setTestStarted] = useState(false);
+        const [showPreTestModal, setShowPreTestModal] = useState(true);
+        const [startTime, setStartTime] = useState(null);
+        const [timeRemaining, setTimeRemaining] = useState(null);
+        const [isOvertime, setIsOvertime] = useState(false);
+        const [timeLimit, setTimeLimit] = useState(60); // minutes
+        const [testEnded, setTestEnded] = useState(false);
+        const [hasShownWarning10, setHasShownWarning10] = useState(false);
+        const [hasShownWarning5, setHasShownWarning5] = useState(false);
+        const [hasShownWarning1, setHasShownWarning1] = useState(false);
+
+        const timerIntervalRef = useRef(null);
+
+        // LocalStorage keys
+        const STORAGE_KEY_START = `test_${TEST_ID}_start`;
+        const STORAGE_KEY_STARTED = `test_${TEST_ID}_started`;
+
         // Load test data on mount
         useEffect(() => {
             if (!TEST_ID) {
@@ -81,6 +122,43 @@
             }
             fetchTestData();
         }, []);
+
+        // Timer countdown effect
+        useEffect(() => {
+            if (!startTime || testEnded) return;
+
+            timerIntervalRef.current = setInterval(() => {
+                const elapsed = Date.now() - new Date(startTime).getTime();
+                const remaining = (timeLimit * 60 * 1000) - elapsed;
+
+                if (remaining <= 0) {
+                    setIsOvertime(true);
+                    setTimeRemaining(Math.abs(remaining));
+                } else {
+                    setTimeRemaining(remaining);
+                }
+
+                // Warning notifications
+                if (!hasShownWarning10 && remaining > 0 && remaining <= 10 * 60 * 1000) {
+                    setHasShownWarning10(true);
+                    alert('⚠️ 10 minutes remaining!');
+                }
+                if (!hasShownWarning5 && remaining > 0 && remaining <= 5 * 60 * 1000) {
+                    setHasShownWarning5(true);
+                    alert('⚠️ 5 minutes remaining!');
+                }
+                if (!hasShownWarning1 && remaining > 0 && remaining <= 1 * 60 * 1000) {
+                    setHasShownWarning1(true);
+                    alert('⚠️ 1 minute remaining!');
+                }
+            }, 1000);
+
+            return () => {
+                if (timerIntervalRef.current) {
+                    clearInterval(timerIntervalRef.current);
+                }
+            };
+        }, [startTime, timeLimit, testEnded, hasShownWarning10, hasShownWarning5, hasShownWarning1]);
 
         const fetchTestData = async () => {
             try {
@@ -100,25 +178,111 @@
                 }
 
                 setTestData(data.test_task);
-                setQuestions(data.questions || []);
+                setQuestions(data.questions);
+                setTimeLimit(data.time_tracking?.time_limit_minutes || 60);
 
-                // Pre-populate existing answers
-                const existingAnswers = {};
-                const saved = {};
+                // Pre-populate answers from ClickUp
+                const initialAnswers = {};
+                const initialSaved = {};
                 data.questions.forEach(q => {
                     if (q.user_input) {
-                        existingAnswers[q.id] = q.user_input;
-                        saved[q.id] = true;
+                        initialAnswers[q.id] = q.user_input;
+                        initialSaved[q.id] = true;
                     }
                 });
-                setAnswers(existingAnswers);
-                setSavedAnswers(saved);
+                setAnswers(initialAnswers);
+                setSavedAnswers(initialSaved);
 
+                // Check if test already started (from ClickUp or localStorage)
+                const savedStartTime = data.time_tracking?.start_time || localStorage.getItem(STORAGE_KEY_START);
+                const wasStarted = localStorage.getItem(STORAGE_KEY_STARTED) === 'true';
+
+                if (savedStartTime) {
+                    setStartTime(savedStartTime);
+                    setTestStarted(true);
+                    setShowPreTestModal(false);
+                    localStorage.setItem(STORAGE_KEY_START, savedStartTime);
+                    localStorage.setItem(STORAGE_KEY_STARTED, 'true');
+                }
+
+                // Check if test already ended
+                if (data.time_tracking?.end_time) {
+                    setTestEnded(true);
+                    setShowPreTestModal(false);
+                }
+
+            } catch (err) {
+                console.error('Error loading test:', err);
+                setError(`Failed to load test: ${err.message}`);
+            } finally {
                 setLoading(false);
-            } catch (error) {
-                console.error('Error fetching test data:', error);
-                setError(`Failed to load test: ${error.message}`);
-                setLoading(false);
+            }
+        };
+
+        const handleStartTest = async () => {
+            try {
+                // Call backend to record start time
+                const response = await fetch(`${BACKEND_URL}/api/test/start/${TEST_ID}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to start test');
+                }
+
+                const data = await response.json();
+                const startTimeISO = data.start_time;
+
+                // Update state and localStorage
+                setStartTime(startTimeISO);
+                setTestStarted(true);
+                setShowPreTestModal(false);
+                localStorage.setItem(STORAGE_KEY_START, startTimeISO);
+                localStorage.setItem(STORAGE_KEY_STARTED, 'true');
+
+            } catch (err) {
+                console.error('Error starting test:', err);
+                alert('Failed to start test. Please try again.');
+            }
+        };
+
+        const handleEndTest = async () => {
+            if (!window.confirm('Are you sure you want to submit your test? This cannot be undone.')) {
+                return;
+            }
+
+            try {
+                // Call backend to record end time
+                const response = await fetch(`${BACKEND_URL}/api/test/end/${TEST_ID}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to end test');
+                }
+
+                const data = await response.json();
+
+                setTestEnded(true);
+                if (timerIntervalRef.current) {
+                    clearInterval(timerIntervalRef.current);
+                }
+
+                // Clear localStorage
+                localStorage.removeItem(STORAGE_KEY_START);
+                localStorage.removeItem(STORAGE_KEY_STARTED);
+
+                alert(`Test submitted successfully!\n\nDuration: ${data.duration_minutes ? Math.round(data.duration_minutes) + ' minutes' : 'N/A'}`);
+
+            } catch (err) {
+                console.error('Error ending test:', err);
+                alert('Failed to submit test. Please try again.');
             }
         };
 
@@ -134,146 +298,59 @@
             }));
         };
 
-        const submitAnswer = async (questionId) => {
+        const handleSaveAnswer = async (questionId) => {
+            const answer = answers[questionId];
+
+            if (!answer || !answer.trim()) {
+                alert('Please provide an answer before saving.');
+                return;
+            }
+
             try {
                 setSubmittingAnswers(prev => ({ ...prev, [questionId]: true }));
 
-                const response = await fetch(
-                    `${BACKEND_URL}/api/test/submit-answer/${questionId}`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ user_input: answers[questionId] })
-                    }
-                );
+                const response = await fetch(`${BACKEND_URL}/api/test/submit-answer/${questionId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ user_input: answer })
+                });
 
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    throw new Error(`HTTP ${response.status}`);
                 }
 
-                const result = await response.json();
+                const data = await response.json();
 
-                if (result.success) {
+                if (data.success) {
                     setSavedAnswers(prev => ({
                         ...prev,
                         [questionId]: true
                     }));
                 } else {
-                    alert(`Error: ${result.error || 'Failed to save answer'}`);
+                    throw new Error(data.error || 'Failed to save answer');
                 }
-            } catch (error) {
-                console.error('Error submitting answer:', error);
-                alert(`Failed to save answer: ${error.message}`);
+
+            } catch (err) {
+                console.error('Error saving answer:', err);
+                alert(`Failed to save answer: ${err.message}`);
             } finally {
                 setSubmittingAnswers(prev => ({ ...prev, [questionId]: false }));
             }
         };
 
-        const renderQuestion = (question) => {
-            const questionType = QUESTION_TYPES[question.question_type] || 'Unknown';
-            const hasAnswer = answers[question.id] && answers[question.id].trim().length > 0;
-            const isSaved = savedAnswers[question.id];
-            const isSubmitting = submittingAnswers[question.id];
-
-            return (
-                <div key={question.id} className="bg-white rounded-lg shadow-md p-6 mb-4 question-card">
-                    <div className="mb-4">
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-lg font-semibold text-gray-800">
-                                {question.name}
-                            </h3>
-                            <div className="flex items-center space-x-2">
-                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                    {questionType}
-                                </span>
-                                {isSaved && (
-                                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded flex items-center">
-                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
-                                        </svg>
-                                        Saved
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                        <p className="text-gray-700 whitespace-pre-wrap">
-                            {question.question_type === 0
-                                ? question.question_text.split(/\s+A\.\s+/)[0].trim()
-                                : question.question_text
-                            }
-                        </p>
-                    </div>
-
-                    {/* Multiple Choice Options */}
-                    {question.question_type === 0 && (
-                        <div className="space-y-2">
-                            {question.options.map(option => (
-                                <label key={option.letter} className="flex items-start space-x-3 cursor-pointer p-3 rounded-md radio-option border border-gray-200">
-                                    <input
-                                        type="radio"
-                                        name={`question_${question.id}`}
-                                        value={option.letter}
-                                        checked={answers[question.id] === option.letter}
-                                        onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-                                        className="form-radio h-5 w-5 text-blue-600 mt-0.5"
-                                    />
-                                    <span className="text-sm flex-1">
-                                        <strong className="text-blue-600">{option.letter}.</strong> {option.text}
-                                    </span>
-                                </label>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Short Answer Input */}
-                    {question.question_type === 1 && (
-                        <textarea
-                            value={answers[question.id] || ''}
-                            onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-                            placeholder="Enter your answer here..."
-                            rows="6"
-                            className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                    )}
-
-                    <div className="mt-4 flex items-center justify-between">
-                        <button
-                            onClick={() => submitAnswer(question.id)}
-                            disabled={!hasAnswer || isSubmitting || isSaved}
-                            className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
-                        >
-                            {isSubmitting ? (
-                                <>
-                                    <div className="spinner mr-2"></div>
-                                    Saving...
-                                </>
-                            ) : isSaved ? (
-                                <>
-                                    <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
-                                    </svg>
-                                    Saved
-                                </>
-                            ) : (
-                                'Save Answer'
-                            )}
-                        </button>
-                        {!isSaved && hasAnswer && (
-                            <span className="text-xs text-gray-500">
-                                Click "Save Answer" to save your response
-                            </span>
-                        )}
-                    </div>
-                </div>
-            );
-        };
+        // Calculate completion progress
+        const completedCount = Object.keys(savedAnswers).filter(id => savedAnswers[id]).length;
+        const totalCount = questions.length;
+        const progressPercent = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
         if (loading) {
             return (
-                <div className="flex items-center justify-center min-h-screen">
+                <div className="min-h-screen flex items-center justify-center">
                     <div className="text-center">
                         <div className="spinner mx-auto mb-4"></div>
-                        <span className="text-gray-600">Loading test...</span>
+                        <p className="text-gray-600">Loading test...</p>
                     </div>
                 </div>
             );
@@ -281,13 +358,13 @@
 
         if (error) {
             return (
-                <div className="flex items-center justify-center min-h-screen">
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
-                        <h2 className="text-red-800 font-semibold text-lg mb-2">Error Loading Test</h2>
-                        <p className="text-red-700">{error}</p>
+                <div className="min-h-screen flex items-center justify-center p-4">
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-lg">
+                        <h2 className="text-red-800 text-xl font-bold mb-2">Error Loading Test</h2>
+                        <p className="text-red-700 mb-4">{error}</p>
                         <button
                             onClick={fetchTestData}
-                            className="mt-4 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+                            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
                         >
                             Retry
                         </button>
@@ -296,62 +373,229 @@
             );
         }
 
-        const completedCount = Object.keys(savedAnswers).filter(key => savedAnswers[key]).length;
-        const totalCount = questions.length;
+        // Pre-Test Modal
+        if (showPreTestModal && !testStarted) {
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                        <h2 className="text-2xl font-bold text-gray-800 mb-4">
+                            {testData?.name || 'Test Administration'}
+                        </h2>
+
+                        <div className="space-y-3 mb-6">
+                            <div className="flex items-center text-gray-700">
+                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span><strong>{totalCount}</strong> questions</span>
+                            </div>
+
+                            <div className="flex items-center text-gray-700">
+                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span>Time limit: <strong>{timeLimit} minutes</strong></span>
+                            </div>
+                        </div>
+
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                            <p className="text-yellow-800 text-sm">
+                                ⚠️ <strong>Important:</strong> Once you start the test, the timer cannot be paused.
+                                You will receive warnings at 10, 5, and 1 minute remaining.
+                            </p>
+                        </div>
+
+                        <button
+                            onClick={handleStartTest}
+                            className="w-full bg-green-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-green-700 transition"
+                        >
+                            Start Test
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        // Test Ended Screen
+        if (testEnded) {
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-8 text-center">
+                        <div className="mb-4">
+                            <svg className="w-16 h-16 mx-auto text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <h2 className="text-2xl font-bold text-gray-800 mb-2">Test Submitted</h2>
+                        <p className="text-gray-600 mb-4">Your test has been successfully submitted.</p>
+                        <p className="text-sm text-gray-500">You may now close this window.</p>
+                    </div>
+                </div>
+            );
+        }
 
         return (
-            <div className="container mx-auto px-4 py-8 max-w-4xl">
-                {/* Header */}
-                <div className="mb-8">
-                    <h1 className="text-3xl font-bold text-gray-800 mb-2">
-                        {testData?.name || 'Test'}
-                    </h1>
-                    <div className="flex items-center space-x-4 text-sm text-gray-600">
-                        <span className="flex items-center">
-                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                            </svg>
-                            Total Questions: {totalCount}
-                        </span>
-                        <span className="flex items-center">
-                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            Saved: {completedCount}
-                        </span>
-                    </div>
-                    {completedCount > 0 && (
-                        <div className="mt-3">
+            <div className="min-h-screen pb-20">
+                {/* Header with Timer */}
+                <div className="bg-white shadow-md sticky top-0 z-40">
+                    <div className="max-w-4xl mx-auto px-4 py-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <h1 className="text-2xl font-bold text-gray-800">
+                                {testData?.name || 'Test'}
+                            </h1>
+
+                            {/* Timer Display */}
+                            {startTime && (
+                                <div className={`text-right ${isOvertime ? 'pulse-warning' : ''}`}>
+                                    <div className={`text-2xl font-bold ${isOvertime ? 'text-red-600' : 'text-green-600'}`}>
+                                        {formatTime(timeRemaining)}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                        {isOvertime ? 'OVERTIME' : 'Time Remaining'}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="mb-2">
+                            <div className="flex justify-between text-sm text-gray-600 mb-1">
+                                <span>Progress</span>
+                                <span>{completedCount} / {totalCount} questions saved</span>
+                            </div>
                             <div className="w-full bg-gray-200 rounded-full h-2">
                                 <div
-                                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                    style={{ width: `${(completedCount / totalCount) * 100}%` }}
+                                    className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${progressPercent}%` }}
                                 ></div>
                             </div>
                         </div>
-                    )}
+                    </div>
                 </div>
 
                 {/* Questions */}
-                <div className="space-y-6">
-                    {questions.map(renderQuestion)}
-                </div>
+                <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+                    {questions.map((question, idx) => (
+                        <div key={question.id} className="question-card bg-white rounded-lg shadow p-6">
+                            <div className="flex items-start justify-between mb-4">
+                                <div className="flex-1">
+                                    <div className="flex items-center space-x-2 mb-2">
+                                        <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-1 rounded">
+                                            {question.name}
+                                        </span>
+                                        <span className="text-xs text-gray-500">
+                                            {QUESTION_TYPES[question.question_type]}
+                                        </span>
+                                    </div>
+                                    <p className="text-gray-800 font-medium whitespace-pre-wrap">
+                                        {question.question_text}
+                                    </p>
+                                </div>
 
-                {/* Footer */}
-                {completedCount === totalCount && (
-                    <div className="mt-8 bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-                        <svg className="w-12 h-12 mx-auto text-green-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <h3 className="text-green-800 font-semibold text-lg mb-2">All Questions Saved!</h3>
-                        <p className="text-green-700">You have saved answers to all {totalCount} questions.</p>
+                                {/* Save Status Badge */}
+                                {savedAnswers[question.id] ? (
+                                    <span className="ml-4 bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded whitespace-nowrap">
+                                        ✓ Saved
+                                    </span>
+                                ) : answers[question.id] ? (
+                                    <span className="ml-4 bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-1 rounded whitespace-nowrap">
+                                        Not Saved
+                                    </span>
+                                ) : null}
+                            </div>
+
+                            {/* Multiple Choice */}
+                            {question.question_type === 0 && (
+                                <div className="space-y-2 mb-4">
+                                    {question.options.map(option => (
+                                        <label
+                                            key={option.letter}
+                                            className="flex items-start space-x-3 p-3 rounded cursor-pointer radio-option"
+                                        >
+                                            <input
+                                                type="radio"
+                                                name={`question_${question.id}`}
+                                                value={option.letter}
+                                                checked={answers[question.id] === option.letter}
+                                                onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+                                                className="mt-1"
+                                            />
+                                            <span className="flex-1">
+                                                <strong>{option.letter}.</strong> {option.text}
+                                            </span>
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Short Answer */}
+                            {question.question_type === 1 && (
+                                <div className="mb-4">
+                                    <textarea
+                                        value={answers[question.id] || ''}
+                                        onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+                                        placeholder="Enter your answer here..."
+                                        rows="6"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    />
+                                </div>
+                            )}
+
+                            {/* Save Button */}
+                            <button
+                                onClick={() => handleSaveAnswer(question.id)}
+                                disabled={submittingAnswers[question.id] || !answers[question.id]}
+                                className={`w-full py-2 px-4 rounded font-semibold transition ${
+                                    submittingAnswers[question.id]
+                                        ? 'bg-gray-300 cursor-not-allowed'
+                                        : savedAnswers[question.id]
+                                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                }`}
+                            >
+                                {submittingAnswers[question.id] ? (
+                                    <span className="flex items-center justify-center">
+                                        <div className="spinner mr-2"></div>
+                                        Saving...
+                                    </span>
+                                ) : savedAnswers[question.id] ? (
+                                    'Saved ✓'
+                                ) : (
+                                    'Save Answer'
+                                )}
+                            </button>
+                        </div>
+                    ))}
+
+                    {/* Submit Test Button */}
+                    <div className="bg-white rounded-lg shadow p-6">
+                        <h3 className="text-lg font-bold text-gray-800 mb-4">Submit Test</h3>
+                        <p className="text-gray-600 mb-4">
+                            {completedCount === totalCount ? (
+                                <span className="text-green-600 font-semibold">
+                                    ✓ All questions answered! You may submit your test.
+                                </span>
+                            ) : (
+                                <span>
+                                    You have answered {completedCount} out of {totalCount} questions.
+                                    You can submit now or continue answering.
+                                </span>
+                            )}
+                        </p>
+                        <button
+                            onClick={handleEndTest}
+                            className="w-full bg-purple-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-purple-700 transition"
+                        >
+                            Submit Test
+                        </button>
                     </div>
-                )}
+                </div>
             </div>
         );
     }
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<TestAdministrationApp />);
+    // Render app
+    ReactDOM.render(<TestAdministrationApp />, document.getElementById('root'));
     {% endraw %}
     </script>
 </body>

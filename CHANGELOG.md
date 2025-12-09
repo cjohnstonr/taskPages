@@ -1,5 +1,69 @@
 # CHANGELOG
 
+## [2025-12-09] - Type: UI/Feature
+- Change: Add 60-minute test timer with time tracking, warnings, and overflow handling
+- Files: backend/app_secure.py (lines 2396-2411, 2469-2485, 2547-2652), backend/templates/secured/test-administration.html (complete rewrite, 603 lines)
+- State impact: Added timer state management (start time, remaining time, overtime flag, warning states)
+- Field mutations:
+  - START_TIME (a2783917-49a9-453a-9d4b-fe9d43ecd055) on parent task - write on test start
+  - END_TIME (2ebae004-8f25-46b6-83c2-96007b339e1f) on parent task - write on test completion
+- Performance: 1-second timer interval, localStorage for persistence, no impact on API endpoints
+
+### Details
+**Backend Implementation**:
+- Updated `/api/test/initialize/<task_id>` to read start/end times from parent task custom fields
+- Added `/api/test/start/<task_id>` POST endpoint to record test start time in ISO 8601 format
+- Added `/api/test/end/<task_id>` POST endpoint to record end time and calculate duration in minutes
+- Time tracking fields stored on parent task (test), not on question subtasks
+- Rate limiting: 10 req/min for start/end endpoints
+- Returns calculated duration_minutes in end endpoint response
+
+**Frontend Timer Features**:
+- Pre-test modal with "Start Test" button and non-pausable timer warning
+- 60-minute countdown timer displayed in header (green when normal, red when overtime)
+- Warning notifications at 10, 5, and 1 minute remaining (JavaScript alerts)
+- Overtime detection with pulsing red display and "OVERTIME" label
+- Timer persists across page refreshes using multi-layer strategy:
+  1. ClickUp custom field (source of truth)
+  2. localStorage (browser persistence)
+  3. React state (runtime tracking)
+- Format: MM:SS display (e.g., "45:30" or "-05:15" for overtime)
+- Timer cleanup on component unmount to prevent memory leaks
+
+**Timer Reliability Strategy**:
+- On page load: Check ClickUp custom field first, fall back to localStorage
+- On timer start: Write to ClickUp custom field AND localStorage AND React state
+- On page refresh: Resume timer from ClickUp custom field or localStorage
+- On test end: Write to ClickUp custom field, calculate duration, clear localStorage
+- Timer continues running even if over time limit (shows negative time in red)
+
+**User Experience Flow**:
+1. User navigates to test URL → Pre-test modal appears
+2. Modal shows: question count, 60-minute time limit, non-pausable warning
+3. User clicks "Start Test" → Start time written to ClickUp and localStorage
+4. Timer counts down from 60:00 → Warnings at 10:00, 5:00, 1:00
+5. Timer hits 00:00 → Switches to red overtime display with negative time
+6. User submits test → End time written to ClickUp with duration calculation
+7. Page refresh during test → Timer resumes from last known start time
+
+**Custom Field IDs** (Parent Task Time Tracking):
+- START_TIME: `a2783917-49a9-453a-9d4b-fe9d43ecd055` (date field, ISO 8601 format)
+- END_TIME: `2ebae004-8f25-46b6-83c2-96007b339e1f` (date field, ISO 8601 format)
+
+**Technical Implementation**:
+- React hooks: useState, useEffect, useCallback, useRef for timer management
+- setInterval with 1-second updates for countdown display
+- localStorage keys: 'test_start_time', 'test_started', 'test_limit_minutes'
+- Cleanup: clearInterval on component unmount, localStorage clear on test end
+- Date calculations: JavaScript Date() with millisecond precision
+- Duration calculation: (end_time - start_time) in minutes on backend
+
+**Security**:
+- All timer endpoints protected with @login_required decorator
+- Rate limiting prevents timer abuse (10 req/min)
+- User email logged for audit trail on start/end actions
+- ISO 8601 UTC timestamps ensure timezone consistency
+
 ## [2025-12-09] - Type: UI
 
 - Change: Add test administration page for ClickUp-based testing

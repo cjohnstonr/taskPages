@@ -2393,8 +2393,19 @@ def initialize_test(task_id):
     try:
         logger.info(f"Initializing test for task: {task_id} by user: {request.user.get('email')}")
 
-        # Fetch parent task
+        # Fetch parent task with custom fields for time tracking
         test_task = clickup_service.get_task(task_id, custom_task_ids=True, include_subtasks=True)
+
+        # Time tracking custom field IDs (on parent task)
+        START_TIME_FIELD_ID = 'a2783917-49a9-453a-9d4b-fe9d43ecd055'
+        END_TIME_FIELD_ID = '2ebae004-8f25-46b6-83c2-96007b339e1f'
+
+        # Extract start/end times from parent task custom fields
+        parent_custom_fields = {
+            cf['id']: cf.get('value') for cf in test_task.get('custom_fields', [])
+        }
+        start_time = parent_custom_fields.get(START_TIME_FIELD_ID)
+        end_time = parent_custom_fields.get(END_TIME_FIELD_ID)
 
         # Fetch all subtasks with custom fields
         subtasks = clickup_service.fetch_subtasks_with_details(task_id)
@@ -2463,6 +2474,13 @@ def initialize_test(task_id):
                 "total_questions": len(questions),
                 "completed_questions": sum(1 for q in questions if q['user_input']),
                 "test_name": test_task.get('name', 'Test')
+            },
+            "time_tracking": {
+                "start_time": start_time,  # ISO datetime string or null
+                "end_time": end_time,      # ISO datetime string or null
+                "time_limit_minutes": 60,  # 1 hour time limit
+                "start_time_field_id": START_TIME_FIELD_ID,
+                "end_time_field_id": END_TIME_FIELD_ID
             }
         })
 
@@ -2524,6 +2542,114 @@ def submit_answer(question_id):
     except Exception as e:
         logger.error(f"Error submitting answer for question {question_id}: {e}")
         return jsonify({"error": f"Failed to save answer: {str(e)}"}), 500
+
+
+@app.route('/api/test/start/<task_id>', methods=['POST'])
+@login_required
+@rate_limiter.rate_limit(limit='10 per minute')
+def start_test(task_id):
+    """
+    Record start time for a test in parent task custom field
+
+    Returns:
+    {
+        "success": true,
+        "start_time": "2025-12-09T22:30:00.000Z",
+        "task_id": "868gne5g9"
+    }
+    """
+    try:
+        from datetime import datetime
+
+        logger.info(f"Starting test {task_id} for user {request.user.get('email')}")
+
+        # Generate ISO 8601 UTC timestamp
+        start_time = datetime.utcnow().isoformat(timespec='milliseconds') + 'Z'
+
+        # Update parent task custom field
+        START_TIME_FIELD_ID = 'a2783917-49a9-453a-9d4b-fe9d43ecd055'
+        clickup_service.update_custom_field(task_id, START_TIME_FIELD_ID, start_time)
+
+        logger.info(f"Test {task_id} started at {start_time}")
+
+        return jsonify({
+            "success": True,
+            "start_time": start_time,
+            "task_id": task_id
+        })
+
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            return jsonify({"error": "Test not found"}), 404
+        logger.error(f"ClickUp API error recording start time: {e}")
+        return jsonify({"error": "Failed to record start time"}), 500
+    except Exception as e:
+        logger.error(f"Error starting test {task_id}: {e}")
+        return jsonify({"error": f"Failed to start test: {str(e)}"}), 500
+
+
+@app.route('/api/test/end/<task_id>', methods=['POST'])
+@login_required
+@rate_limiter.rate_limit(limit='10 per minute')
+def end_test(task_id):
+    """
+    Record end time for a test in parent task custom field
+
+    Returns:
+    {
+        "success": true,
+        "end_time": "2025-12-09T23:30:00.000Z",
+        "task_id": "868gne5g9",
+        "duration_minutes": 60.5
+    }
+    """
+    try:
+        from datetime import datetime
+
+        logger.info(f"Ending test {task_id} for user {request.user.get('email')}")
+
+        # Generate ISO 8601 UTC timestamp
+        end_time = datetime.utcnow().isoformat(timespec='milliseconds') + 'Z'
+
+        # Update parent task custom field
+        END_TIME_FIELD_ID = '2ebae004-8f25-46b6-83c2-96007b339e1f'
+        clickup_service.update_custom_field(task_id, END_TIME_FIELD_ID, end_time)
+
+        # Optionally calculate duration if start time exists
+        duration_minutes = None
+        try:
+            # Fetch start time from task
+            test_task = clickup_service.get_task(task_id, custom_task_ids=True)
+            parent_custom_fields = {
+                cf['id']: cf.get('value') for cf in test_task.get('custom_fields', [])
+            }
+            START_TIME_FIELD_ID = 'a2783917-49a9-453a-9d4b-fe9d43ecd055'
+            start_time_str = parent_custom_fields.get(START_TIME_FIELD_ID)
+
+            if start_time_str:
+                start_dt = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                duration_minutes = (end_dt - start_dt).total_seconds() / 60
+        except Exception as e:
+            logger.warning(f"Could not calculate duration: {e}")
+
+        logger.info(f"Test {task_id} ended at {end_time}")
+
+        return jsonify({
+            "success": True,
+            "end_time": end_time,
+            "task_id": task_id,
+            "duration_minutes": duration_minutes
+        })
+
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            return jsonify({"error": "Test not found"}), 404
+        logger.error(f"ClickUp API error recording end time: {e}")
+        return jsonify({"error": "Failed to record end time"}), 500
+    except Exception as e:
+        logger.error(f"Error ending test {task_id}: {e}")
+        return jsonify({"error": f"Failed to end test: {str(e)}"}), 500
 
 
 @app.route('/api/property/<property_id>/field-operations/unplanned', methods=['GET'])
