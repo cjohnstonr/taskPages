@@ -50,7 +50,7 @@
     {% raw %}
     const { useState, useEffect, useCallback } = React;
 
-    const BACKEND_URL = 'https://taskpages-backend.onrender.com';
+    const BACKEND_URL = window.location.origin;
 
     // Get task_id from URL path (/pages/test/<task_id>)
     const pathParts = window.location.pathname.split('/');

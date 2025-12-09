@@ -46,6 +46,16 @@
 - Task ID from URL path (e.g., `/pages/test/868gne5g9`)
 - Any authenticated user can take any test (no role restrictions)
 
+## [2025-12-09] - Type: Bug Fix
+- Change: Fixed BACKEND_URL to use window.location.origin instead of hardcoded production URL
+- Files: backend/templates/secured/test-administration.html (line 53)
+- State impact: None
+- Field mutations: None
+- Performance: No impact
+- Issue: Frontend was calling production API when running locally, causing 403 Forbidden errors
+- Resolution: Changed `const BACKEND_URL = 'https://taskpages-backend.onrender.com'` to `const BACKEND_URL = window.location.origin`
+- Behavior: Now works correctly in both local (http://localhost:5678) and production (https://taskpages-backend.onrender.com) environments
+
 ## [2025-12-02] - Type: UI Enhancement
 - Change: Added dashboard navigation button to escalation-v3 header
 - Files: backend/templates/secured/escalationv3.html (line 4114-4126)
