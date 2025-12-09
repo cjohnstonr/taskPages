@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## [2025-12-09] - Type: Bug Fix
+- Change: Fixed timer modal logic to only check ClickUp for pre-test modal decision
+- Files: backend/templates/secured/test-administration.html (line 197)
+- State impact: None
+- Field mutations: None
+- Performance: No impact
+- Issue: Pre-test modal was being skipped if localStorage had start_time even when ClickUp was empty
+- Root Cause: Line 197 used OR condition checking both ClickUp and localStorage
+- Resolution: Changed to only check `data.time_tracking?.start_time` from ClickUp
+- Behavior: Modal now only skips if ClickUp custom field a2783917-49a9-453a-9d4b-fe9d43ecd055 has a start time
+- localStorage role: Used ONLY for timer countdown display persistence, NOT for modal decision
+- ClickUp remains source of truth for test start state
+
 ## [2025-12-09] - Type: UI/Feature
 - Change: Add 60-minute test timer with time tracking, warnings, and overflow handling
 - Files: backend/app_secure.py (lines 2396-2411, 2469-2485, 2547-2652), backend/templates/secured/test-administration.html (complete rewrite, 603 lines)

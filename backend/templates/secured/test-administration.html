@@ -193,15 +193,15 @@
                 setAnswers(initialAnswers);
                 setSavedAnswers(initialSaved);
 
-                // Check if test already started (from ClickUp or localStorage)
-                const savedStartTime = data.time_tracking?.start_time || localStorage.getItem(STORAGE_KEY_START);
-                const wasStarted = localStorage.getItem(STORAGE_KEY_STARTED) === 'true';
+                // Check if test already started (only from ClickUp - source of truth)
+                const clickupStartTime = data.time_tracking?.start_time;
 
-                if (savedStartTime) {
-                    setStartTime(savedStartTime);
+                if (clickupStartTime) {
+                    setStartTime(clickupStartTime);
                     setTestStarted(true);
                     setShowPreTestModal(false);
-                    localStorage.setItem(STORAGE_KEY_START, savedStartTime);
+                    // Sync to localStorage for timer countdown persistence
+                    localStorage.setItem(STORAGE_KEY_START, clickupStartTime);
                     localStorage.setItem(STORAGE_KEY_STARTED, 'true');
                 }
 
