@@ -214,17 +214,28 @@ class ClickUpService:
             'total': len(comments)  # ClickUp doesn't always provide total count
         }
     
-    def update_custom_field(self, task_id: str, field_id: str, value: Any) -> Dict[str, Any]:
-        """Update a custom field on a task"""
+    def update_custom_field(self, task_id: str, field_id: str, value: Any, value_options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Update a custom field on a task
+
+        Args:
+            task_id: The task ID to update
+            field_id: The custom field ID
+            value: The value to set
+            value_options: Optional dict for field-specific options (e.g., {"time": true} for date fields)
+        """
         url = f"{CLICKUP_BASE_URL}/task/{task_id}/field/{field_id}"
         data = {"value": value}
-        
+
+        # Include value_options if provided (e.g., for date fields with time precision)
+        if value_options:
+            data["value_options"] = value_options
+
         response = requests.post(url, headers=self.headers, json=data, timeout=10)
-        
+
         if response.status_code != 200:
             logger.error(f"Failed to update field {field_id} on task {task_id}: {response.text}")
             response.raise_for_status()
-        
+
         return response.json()
     
     def find_process_library_root(self, start_task_id: str) -> Dict[str, Any]:
@@ -2577,9 +2588,15 @@ def start_test(task_id):
         # Use time.time() for correct current timestamp (timezone-independent)
         start_time_ms = int(time.time() * 1000)
 
-        # Update parent task custom field with Unix milliseconds
+        # Update parent task custom field with Unix milliseconds and time precision
+        # value_options with "time": true tells ClickUp to store hour/minute/second, not just date
         START_TIME_FIELD_ID = 'a2783917-49a9-453a-9d4b-fe9d43ecd055'
-        clickup_service.update_custom_field(task_id, START_TIME_FIELD_ID, start_time_ms)
+        clickup_service.update_custom_field(
+            task_id,
+            START_TIME_FIELD_ID,
+            start_time_ms,
+            value_options={"time": True}
+        )
 
         logger.info(f"Test {task_id} started at {start_time_ms}")
 
@@ -2627,26 +2644,38 @@ def end_test(task_id):
         # Use time.time() for correct current timestamp (timezone-independent)
         end_time_ms = int(time.time() * 1000)
 
-        # Update parent task custom field with Unix milliseconds
+        # Update parent task custom field with Unix milliseconds and time precision
+        # value_options with "time": true tells ClickUp to store hour/minute/second, not just date
         END_TIME_FIELD_ID = '2ebae004-8f25-46b6-83c2-96007b339e1f'
-        clickup_service.update_custom_field(task_id, END_TIME_FIELD_ID, end_time_ms)
+        clickup_service.update_custom_field(
+            task_id,
+            END_TIME_FIELD_ID,
+            end_time_ms,
+            value_options={"time": True}
+        )
 
-        # Optionally calculate duration if start time exists
+        # Fetch start_time from ClickUp (now has precise time thanks to value_options)
+        # Calculate duration using ClickUp stored values
         duration_minutes = None
         try:
-            # Fetch start time from task
-            test_task = clickup_service.get_task(task_id, custom_task_ids=True)
-            parent_custom_fields = {
-                cf['id']: cf.get('value') for cf in test_task.get('custom_fields', [])
-            }
+            task = clickup_service.get_task(task_id, custom_task_ids=True)
             START_TIME_FIELD_ID = 'a2783917-49a9-453a-9d4b-fe9d43ecd055'
-            start_time_ms = parent_custom_fields.get(START_TIME_FIELD_ID)
+
+            # Find the start time custom field
+            start_time_ms = None
+            for cf in task.get('custom_fields', []):
+                if cf.get('id') == START_TIME_FIELD_ID and cf.get('value'):
+                    start_time_ms = int(cf['value'])
+                    break
 
             if start_time_ms:
-                # Both timestamps are Unix milliseconds
-                duration_minutes = (end_time_ms - int(start_time_ms)) / 1000 / 60
+                # Calculate precise duration using ClickUp stored timestamps
+                duration_minutes = (end_time_ms - start_time_ms) / 1000 / 60
+                logger.info(f"Duration calculated from ClickUp: {duration_minutes:.2f} minutes")
+            else:
+                logger.warning("No start time found in ClickUp - cannot calculate duration")
         except Exception as e:
-            logger.warning(f"Could not calculate duration: {e}")
+            logger.warning(f"Could not calculate duration from ClickUp start_time: {e}")
 
         logger.info(f"Test {task_id} ended at {end_time_ms}")
 

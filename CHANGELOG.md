@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## [2025-12-09] - Type: Fix/Critical/ClickUp_Date_Precision
+- Change: Fix ClickUp date field time precision using value_options parameter
+- Files: backend/app_secure.py (lines 217-239, 2591-2599, 2647-2678)
+- State impact: ClickUp now stores precise hour/minute/second instead of rounding to midnight
+- Field mutations: START_TIME and END_TIME custom fields now have time precision
+- Performance: Minimal impact (+1 API call to fetch start_time for duration calculation)
+- Root cause: ClickUp date fields require `value_options: {"time": true}` to store time precision
+  - Without this option, ClickUp rounds all timestamps to midnight (00:00:00)
+  - This caused duration calculation to show 778 minutes (13 hours) instead of actual test duration
+  - Example: Test at 5:00 PM → stored as midnight → duration = 5:00 PM - midnight = 17 hours
+- Fix: Pass `value_options={"time": True}` when updating date custom fields
+- Changes:
+  - Lines 217-239: Updated `update_custom_field()` to accept optional `value_options` parameter
+  - Lines 2591-2599: Modified start_test to pass `value_options={"time": True}` when setting start time
+  - Lines 2647-2660: Modified end_test to pass `value_options={"time": True}` when setting end time
+  - Lines 2657-2678: Updated duration calculation to fetch start_time from ClickUp (now has precision)
+- Documentation: ClickUp API requires {"value": timestamp_ms, "value_options": {"time": true}} for date+time fields
+- Eliminates need for localStorage-based duration calculation
+
 ## [2025-12-09] - Type: Fix/Critical/Timezone
 - Change: Fix timezone bug in timestamp generation - use time.time() instead of datetime.utcnow().timestamp()
 - Files: backend/app_secure.py (lines 2578, 2587, 2628, 2654, 2415, 2417)
