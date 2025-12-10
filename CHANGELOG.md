@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## [2025-12-09] - Type: Fix/API
+- Change: Fix ClickUp API date field format - changed from ISO 8601 strings to Unix milliseconds
+- Files: backend/app_secure.py (lines 2407-2417, 2567, 2612, 2627-2631)
+- State impact: None (fix for existing functionality)
+- Field mutations: Corrected format for START_TIME and END_TIME custom fields
+- Performance: No impact
+- Root cause: ClickUp date fields require Unix timestamp in milliseconds (integer), not ISO 8601 strings
+- Error fixed: 500 Internal Server Error with `{"err":"Value is not a valid date","ECODE":"FIELD_017"}`
+- Changes:
+  - Line 2567: Changed start_test to send `int(datetime.utcnow().timestamp() * 1000)` instead of ISO string
+  - Line 2612: Changed end_test to send Unix milliseconds instead of ISO string
+  - Lines 2407-2417: Added conversion in initialize endpoint (Unix ms from ClickUp → ISO string for frontend)
+  - Lines 2627-2631: Fixed duration calculation to use Unix milliseconds directly
+
 ## [2025-12-09] - Type: UI/Feature
 - Change: Pre-test modal now ALWAYS shows on page load regardless of test state
 - Files: backend/templates/secured/test-administration.html (lines 202, 211 removed)

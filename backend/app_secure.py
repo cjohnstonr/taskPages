@@ -2404,8 +2404,17 @@ def initialize_test(task_id):
         parent_custom_fields = {
             cf['id']: cf.get('value') for cf in test_task.get('custom_fields', [])
         }
-        start_time = parent_custom_fields.get(START_TIME_FIELD_ID)
-        end_time = parent_custom_fields.get(END_TIME_FIELD_ID)
+        start_time_ms = parent_custom_fields.get(START_TIME_FIELD_ID)
+        end_time_ms = parent_custom_fields.get(END_TIME_FIELD_ID)
+
+        # Convert Unix timestamps to ISO strings for frontend
+        from datetime import datetime
+        start_time = None
+        end_time = None
+        if start_time_ms:
+            start_time = datetime.fromtimestamp(int(start_time_ms) / 1000).isoformat(timespec='milliseconds') + 'Z'
+        if end_time_ms:
+            end_time = datetime.fromtimestamp(int(end_time_ms) / 1000).isoformat(timespec='milliseconds') + 'Z'
 
         # Fetch all subtasks with custom fields
         subtasks = clickup_service.fetch_subtasks_with_details(task_id)
@@ -2563,8 +2572,8 @@ def start_test(task_id):
 
         logger.info(f"Starting test {task_id} for user {request.user.get('email')}")
 
-        # Generate ISO 8601 UTC timestamp
-        start_time = datetime.utcnow().isoformat(timespec='milliseconds') + 'Z'
+        # Generate Unix timestamp in milliseconds (ClickUp date field format)
+        start_time = int(datetime.utcnow().timestamp() * 1000)
 
         # Update parent task custom field
         START_TIME_FIELD_ID = 'a2783917-49a9-453a-9d4b-fe9d43ecd055'
@@ -2608,8 +2617,8 @@ def end_test(task_id):
 
         logger.info(f"Ending test {task_id} for user {request.user.get('email')}")
 
-        # Generate ISO 8601 UTC timestamp
-        end_time = datetime.utcnow().isoformat(timespec='milliseconds') + 'Z'
+        # Generate Unix timestamp in milliseconds (ClickUp date field format)
+        end_time = int(datetime.utcnow().timestamp() * 1000)
 
         # Update parent task custom field
         END_TIME_FIELD_ID = '2ebae004-8f25-46b6-83c2-96007b339e1f'
@@ -2624,12 +2633,11 @@ def end_test(task_id):
                 cf['id']: cf.get('value') for cf in test_task.get('custom_fields', [])
             }
             START_TIME_FIELD_ID = 'a2783917-49a9-453a-9d4b-fe9d43ecd055'
-            start_time_str = parent_custom_fields.get(START_TIME_FIELD_ID)
+            start_time_ms = parent_custom_fields.get(START_TIME_FIELD_ID)
 
-            if start_time_str:
-                start_dt = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
-                end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
-                duration_minutes = (end_dt - start_dt).total_seconds() / 60
+            if start_time_ms:
+                # Both timestamps are Unix milliseconds
+                duration_minutes = (end_time - int(start_time_ms)) / 1000 / 60
         except Exception as e:
             logger.warning(f"Could not calculate duration: {e}")
 
