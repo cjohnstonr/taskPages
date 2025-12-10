@@ -2407,14 +2407,14 @@ def initialize_test(task_id):
         start_time_ms = parent_custom_fields.get(START_TIME_FIELD_ID)
         end_time_ms = parent_custom_fields.get(END_TIME_FIELD_ID)
 
-        # Convert Unix timestamps to ISO strings for frontend
+        # Convert Unix timestamps to ISO strings for frontend (use UTC explicitly)
         from datetime import datetime
         start_time = None
         end_time = None
         if start_time_ms:
-            start_time = datetime.fromtimestamp(int(start_time_ms) / 1000).isoformat(timespec='milliseconds') + 'Z'
+            start_time = datetime.utcfromtimestamp(int(start_time_ms) / 1000).isoformat(timespec='milliseconds') + 'Z'
         if end_time_ms:
-            end_time = datetime.fromtimestamp(int(end_time_ms) / 1000).isoformat(timespec='milliseconds') + 'Z'
+            end_time = datetime.utcfromtimestamp(int(end_time_ms) / 1000).isoformat(timespec='milliseconds') + 'Z'
 
         # Fetch all subtasks with custom fields
         subtasks = clickup_service.fetch_subtasks_with_details(task_id)
@@ -2569,11 +2569,13 @@ def start_test(task_id):
     """
     try:
         from datetime import datetime
+        import time
 
         logger.info(f"Starting test {task_id} for user {request.user.get('email')}")
 
         # Generate Unix timestamp in milliseconds (ClickUp date field format)
-        start_time_ms = int(datetime.utcnow().timestamp() * 1000)
+        # Use time.time() for correct current timestamp (timezone-independent)
+        start_time_ms = int(time.time() * 1000)
 
         # Update parent task custom field with Unix milliseconds
         START_TIME_FIELD_ID = 'a2783917-49a9-453a-9d4b-fe9d43ecd055'
@@ -2581,8 +2583,8 @@ def start_test(task_id):
 
         logger.info(f"Test {task_id} started at {start_time_ms}")
 
-        # Convert to ISO string for frontend
-        start_time_iso = datetime.fromtimestamp(start_time_ms / 1000).isoformat(timespec='milliseconds') + 'Z'
+        # Convert to ISO string for frontend (use UTC explicitly)
+        start_time_iso = datetime.utcfromtimestamp(start_time_ms / 1000).isoformat(timespec='milliseconds') + 'Z'
 
         return jsonify({
             "success": True,
@@ -2617,11 +2619,13 @@ def end_test(task_id):
     """
     try:
         from datetime import datetime
+        import time
 
         logger.info(f"Ending test {task_id} for user {request.user.get('email')}")
 
         # Generate Unix timestamp in milliseconds (ClickUp date field format)
-        end_time_ms = int(datetime.utcnow().timestamp() * 1000)
+        # Use time.time() for correct current timestamp (timezone-independent)
+        end_time_ms = int(time.time() * 1000)
 
         # Update parent task custom field with Unix milliseconds
         END_TIME_FIELD_ID = '2ebae004-8f25-46b6-83c2-96007b339e1f'
@@ -2646,8 +2650,8 @@ def end_test(task_id):
 
         logger.info(f"Test {task_id} ended at {end_time_ms}")
 
-        # Convert to ISO string for frontend
-        end_time_iso = datetime.fromtimestamp(end_time_ms / 1000).isoformat(timespec='milliseconds') + 'Z'
+        # Convert to ISO string for frontend (use UTC explicitly)
+        end_time_iso = datetime.utcfromtimestamp(end_time_ms / 1000).isoformat(timespec='milliseconds') + 'Z'
 
         return jsonify({
             "success": True,

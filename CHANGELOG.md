@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## [2025-12-09] - Type: Fix/Critical/Timezone
+- Change: Fix timezone bug in timestamp generation - use time.time() instead of datetime.utcnow().timestamp()
+- Files: backend/app_secure.py (lines 2578, 2587, 2628, 2654, 2415, 2417)
+- State impact: Timer now shows correct time (60:00 instead of 539:42)
+- Field mutations: ClickUp now receives correct current timestamp, not tomorrow's date
+- Performance: No impact
+- Root cause: datetime.utcnow().timestamp() treats UTC datetime as LOCAL time when converting
+  - If in PST (UTC-8), this adds 8 hours to the timestamp
+  - Result: timestamp was set to TOMORROW instead of NOW
+  - Timer calculated difference: (tomorrow - now) = 539 minutes instead of 60
+- Fix: Use time.time() which always returns correct current Unix timestamp (timezone-independent)
+- Also fixed: datetime.fromtimestamp() → datetime.utcfromtimestamp() for ISO conversion
+- Changes:
+  - Line 2578: Changed to `time.time() * 1000` for current timestamp
+  - Line 2587: Changed to `datetime.utcfromtimestamp()` for ISO conversion
+  - Line 2628: Changed to `time.time() * 1000` for end timestamp
+  - Line 2654: Changed to `datetime.utcfromtimestamp()` for ISO conversion
+  - Lines 2415, 2417: Changed to `datetime.utcfromtimestamp()` in initialize endpoint
+
 ## [2025-12-09] - Type: Fix/Critical
 - Change: Fix start_test and end_test endpoints to return ISO strings instead of Unix milliseconds to frontend
 - Files: backend/app_secure.py (lines 2575-2591, 2623-2657)
