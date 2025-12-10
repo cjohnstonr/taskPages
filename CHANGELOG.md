@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## [2025-12-09] - Type: Fix/Critical
+- Change: Fix start_test and end_test endpoints to return ISO strings instead of Unix milliseconds to frontend
+- Files: backend/app_secure.py (lines 2575-2591, 2623-2657)
+- State impact: Timer now calculates correctly (was showing 539 minutes instead of 60)
+- Field mutations: None (still writing Unix ms to ClickUp, fixed frontend response format)
+- Performance: No impact
+- Root cause: Backend was returning Unix milliseconds to frontend, but frontend expected ISO strings for Date calculation
+- Error fixed: Timer showing wrong time (539:42 instead of 60:00) because frontend couldn't parse Unix ms as Date
+- Changes:
+  - Line 2576: Store Unix ms in `start_time_ms` variable
+  - Line 2585: Convert to ISO string before returning to frontend
+  - Line 2589: Return ISO string in response instead of Unix ms
+  - Line 2624: Store Unix ms in `end_time_ms` variable
+  - Line 2650: Convert to ISO string before returning to frontend
+  - Line 2654: Return ISO string in response instead of Unix ms
+
 ## [2025-12-09] - Type: Fix/API
 - Change: Fix ClickUp API date field format - changed from ISO 8601 strings to Unix milliseconds
 - Files: backend/app_secure.py (lines 2407-2417, 2567, 2612, 2627-2631)

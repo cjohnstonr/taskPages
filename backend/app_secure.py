@@ -2573,17 +2573,20 @@ def start_test(task_id):
         logger.info(f"Starting test {task_id} for user {request.user.get('email')}")
 
         # Generate Unix timestamp in milliseconds (ClickUp date field format)
-        start_time = int(datetime.utcnow().timestamp() * 1000)
+        start_time_ms = int(datetime.utcnow().timestamp() * 1000)
 
-        # Update parent task custom field
+        # Update parent task custom field with Unix milliseconds
         START_TIME_FIELD_ID = 'a2783917-49a9-453a-9d4b-fe9d43ecd055'
-        clickup_service.update_custom_field(task_id, START_TIME_FIELD_ID, start_time)
+        clickup_service.update_custom_field(task_id, START_TIME_FIELD_ID, start_time_ms)
 
-        logger.info(f"Test {task_id} started at {start_time}")
+        logger.info(f"Test {task_id} started at {start_time_ms}")
+
+        # Convert to ISO string for frontend
+        start_time_iso = datetime.fromtimestamp(start_time_ms / 1000).isoformat(timespec='milliseconds') + 'Z'
 
         return jsonify({
             "success": True,
-            "start_time": start_time,
+            "start_time": start_time_iso,
             "task_id": task_id
         })
 
@@ -2618,11 +2621,11 @@ def end_test(task_id):
         logger.info(f"Ending test {task_id} for user {request.user.get('email')}")
 
         # Generate Unix timestamp in milliseconds (ClickUp date field format)
-        end_time = int(datetime.utcnow().timestamp() * 1000)
+        end_time_ms = int(datetime.utcnow().timestamp() * 1000)
 
-        # Update parent task custom field
+        # Update parent task custom field with Unix milliseconds
         END_TIME_FIELD_ID = '2ebae004-8f25-46b6-83c2-96007b339e1f'
-        clickup_service.update_custom_field(task_id, END_TIME_FIELD_ID, end_time)
+        clickup_service.update_custom_field(task_id, END_TIME_FIELD_ID, end_time_ms)
 
         # Optionally calculate duration if start time exists
         duration_minutes = None
@@ -2637,15 +2640,18 @@ def end_test(task_id):
 
             if start_time_ms:
                 # Both timestamps are Unix milliseconds
-                duration_minutes = (end_time - int(start_time_ms)) / 1000 / 60
+                duration_minutes = (end_time_ms - int(start_time_ms)) / 1000 / 60
         except Exception as e:
             logger.warning(f"Could not calculate duration: {e}")
 
-        logger.info(f"Test {task_id} ended at {end_time}")
+        logger.info(f"Test {task_id} ended at {end_time_ms}")
+
+        # Convert to ISO string for frontend
+        end_time_iso = datetime.fromtimestamp(end_time_ms / 1000).isoformat(timespec='milliseconds') + 'Z'
 
         return jsonify({
             "success": True,
-            "end_time": end_time,
+            "end_time": end_time_iso,
             "task_id": task_id,
             "duration_minutes": duration_minutes
         })
