@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## [2025-12-09] - Type: Fix/Critical/Architecture
+- Change: Remove localStorage from test timer - use ClickUp as single source of truth
+- Files: backend/templates/secured/test-administration.html (lines 110-114, 192-198, 230-234, 261-265 removed)
+- State impact: Eliminated dual-state bug between localStorage and ClickUp
+- Field mutations: None (backend already correct)
+- Performance: No impact
+- Root cause: Previous implementation used localStorage as redundant storage layer
+  - Created state synchronization bugs between localStorage and ClickUp
+  - Caused timezone confusion when parsing ISO strings from localStorage
+  - Timer would break if user cleared browser data mid-test
+  - Over-engineered solution with two sources of truth instead of one
+- Fix: Remove all 4 localStorage references, use only ClickUp custom fields
+- Changes:
+  - Lines 110-114: Removed localStorage key definitions (STORAGE_KEY_START, STORAGE_KEY_STARTED)
+  - Lines 192-198: Removed localStorage sync in fetchTestData() (removed setItem calls)
+  - Lines 230-234: Removed localStorage save in handleStartTest() (removed setItem calls)
+  - Lines 261-265: Removed localStorage clear in handleEndTest() (removed removeItem calls)
+- Backend status: ✅ Already correct (no changes needed)
+  - Uses Unix milliseconds: `int(time.time() * 1000)`
+  - Sets time precision: `value_options={"time": True}`
+  - Matches ClickUp API format exactly
+- Timer now works correctly:
+  - Persists across page reloads (reads from ClickUp)
+  - Works across multiple browser tabs (single source of truth)
+  - Survives browser data clearing (stored in ClickUp)
+  - No state drift or synchronization bugs
+- Architecture: Clean single-source-of-truth pattern ✅
+
 ## [2025-12-09] - Type: Fix/Critical/ClickUp_Date_Precision
 - Change: Fix ClickUp date field time precision using value_options parameter
 - Files: backend/app_secure.py (lines 217-239, 2591-2599, 2647-2678)

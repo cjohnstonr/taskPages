@@ -109,10 +109,6 @@
 
         const timerIntervalRef = useRef(null);
 
-        // LocalStorage keys
-        const STORAGE_KEY_START = `test_${TEST_ID}_start`;
-        const STORAGE_KEY_STARTED = `test_${TEST_ID}_started`;
-
         // Load test data on mount
         useEffect(() => {
             if (!TEST_ID) {
@@ -193,15 +189,12 @@
                 setAnswers(initialAnswers);
                 setSavedAnswers(initialSaved);
 
-                // Check if test already started (only from ClickUp - source of truth)
+                // Check if test already started (from ClickUp - source of truth)
                 const clickupStartTime = data.time_tracking?.start_time;
 
                 if (clickupStartTime) {
                     setStartTime(clickupStartTime);
                     setTestStarted(true);
-                    // Sync to localStorage for timer countdown persistence
-                    localStorage.setItem(STORAGE_KEY_START, clickupStartTime);
-                    localStorage.setItem(STORAGE_KEY_STARTED, 'true');
                 }
 
                 // Check if test already ended
@@ -234,12 +227,10 @@
                 const data = await response.json();
                 const startTimeISO = data.start_time;
 
-                // Update state and localStorage
+                // Update state
                 setStartTime(startTimeISO);
                 setTestStarted(true);
                 setShowPreTestModal(false);
-                localStorage.setItem(STORAGE_KEY_START, startTimeISO);
-                localStorage.setItem(STORAGE_KEY_STARTED, 'true');
 
             } catch (err) {
                 console.error('Error starting test:', err);
@@ -271,10 +262,6 @@
                 if (timerIntervalRef.current) {
                     clearInterval(timerIntervalRef.current);
                 }
-
-                // Clear localStorage
-                localStorage.removeItem(STORAGE_KEY_START);
-                localStorage.removeItem(STORAGE_KEY_STARTED);
 
                 alert(`Test submitted successfully!\n\nDuration: ${data.duration_minutes ? Math.round(data.duration_minutes) + ' minutes' : 'N/A'}`);
 
