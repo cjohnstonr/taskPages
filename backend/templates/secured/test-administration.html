@@ -199,7 +199,6 @@
                 if (clickupStartTime) {
                     setStartTime(clickupStartTime);
                     setTestStarted(true);
-                    setShowPreTestModal(false);
                     // Sync to localStorage for timer countdown persistence
                     localStorage.setItem(STORAGE_KEY_START, clickupStartTime);
                     localStorage.setItem(STORAGE_KEY_STARTED, 'true');
@@ -208,7 +207,6 @@
                 // Check if test already ended
                 if (data.time_tracking?.end_time) {
                     setTestEnded(true);
-                    setShowPreTestModal(false);
                 }
 
             } catch (err) {

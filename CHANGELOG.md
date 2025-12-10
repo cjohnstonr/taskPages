@@ -1,17 +1,15 @@
 # CHANGELOG
 
-## [2025-12-09] - Type: Bug Fix
-- Change: Fixed timer modal logic to only check ClickUp for pre-test modal decision
-- Files: backend/templates/secured/test-administration.html (line 197)
-- State impact: None
+## [2025-12-09] - Type: UI/Feature
+- Change: Pre-test modal now ALWAYS shows on page load regardless of test state
+- Files: backend/templates/secured/test-administration.html (lines 202, 211 removed)
+- State impact: Modal always starts visible, only hides after user clicks "Start Test"
 - Field mutations: None
 - Performance: No impact
-- Issue: Pre-test modal was being skipped if localStorage had start_time even when ClickUp was empty
-- Root Cause: Line 197 used OR condition checking both ClickUp and localStorage
-- Resolution: Changed to only check `data.time_tracking?.start_time` from ClickUp
-- Behavior: Modal now only skips if ClickUp custom field a2783917-49a9-453a-9d4b-fe9d43ecd055 has a start time
-- localStorage role: Used ONLY for timer countdown display persistence, NOT for modal decision
-- ClickUp remains source of truth for test start state
+- Previous behavior: Modal was hidden if test already started or ended (based on ClickUp data)
+- New behavior: Modal always shows, allowing users to re-start or review test details
+- Removed lines that set `setShowPreTestModal(false)` based on ClickUp API response
+- Modal only hides when user explicitly clicks "Start Test" button
 
 ## [2025-12-09] - Type: UI/Feature
 - Change: Add 60-minute test timer with time tracking, warnings, and overflow handling
